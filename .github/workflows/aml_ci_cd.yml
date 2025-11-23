@@ -18,8 +18,11 @@ on:
 
 env:
   PYTHON_VERSION: '3.10'
-  REGISTRY: myregistry.azurecr.io
+  REGISTRY: ercotforecastingprod.azurecr.io  # Updated to new ACR in Owner subscription
   IMAGE_NAME: ercot-ml-pipeline
+  AZURE_ML_WORKSPACE: ${{ secrets.AZURE_ML_WORKSPACE }}
+  AZURE_ML_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  AZURE_ML_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
 jobs:
   # Job 1: Lint and Test
@@ -131,9 +134,9 @@ jobs:
           echo "Triggering full pipeline with model retraining..."
           az ml job create \
             --file aml_full_pipeline.yml \
-            --set inputs.retrain=true \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --workspace-name ${{ secrets.AZURE_ML_WORKSPACE }}
+            --set inputs.retrain_models=true \
+            --resource-group ${{ env.AZURE_ML_RESOURCE_GROUP }} \
+            --workspace-name ${{ env.AZURE_ML_WORKSPACE }}
       
       - name: Trigger Prediction Only Pipeline
         if: github.event.inputs.trigger_training != 'true' && !contains(github.event.head_commit.message, '[retrain]')
@@ -141,9 +144,9 @@ jobs:
           echo "Triggering prediction-only pipeline..."
           az ml job create \
             --file aml_full_pipeline.yml \
-            --set inputs.retrain=false \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --workspace-name ${{ secrets.AZURE_ML_WORKSPACE }}
+            --set inputs.retrain_models=false \
+            --resource-group ${{ env.AZURE_ML_RESOURCE_GROUP }} \
+            --workspace-name ${{ env.AZURE_ML_WORKSPACE }}
 
   # Job 4: Deploy Inference Endpoint (Optional)
   deploy-endpoint:
@@ -165,7 +168,7 @@ jobs:
           echo "Updating Azure Container App..."
           az containerapp update \
             --name ercot-inference \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --resource-group ${{ env.AZURE_ML_RESOURCE_GROUP }} \
             --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             || echo "Container App not found or update failed"
 
