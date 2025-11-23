@@ -1,0 +1,46 @@
+# ============================================================================
+# ERCOT ML Pipeline - Production Requirements
+# Python 3.10+
+# 
+# Compatible versions for Docker containerization
+# ============================================================================
+
+# Core Data Processing
+pandas>=2.0.0,<2.2.0
+numpy>=1.24.0,<1.27.0
+pyarrow>=12.0.0
+
+# SQL Database
+pyodbc>=5.0.0
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
+
+# Machine Learning - Tree Models
+lightgbm>=4.0.0
+xgboost>=2.0.0
+
+# Machine Learning - Deep Learning
+torch>=2.0.0
+# torchvision omitted - not needed for inference
+
+# Feature Engineering & Preprocessing
+scikit-learn>=1.3.0
+category-encoders>=2.6.0
+
+# Azure ML SDK (optional - only needed for training)
+# azureml-core>=1.50.0
+# azureml-defaults>=1.50.0
+
+# Azure Storage (for blob access)
+azure-storage-blob>=12.0.0
+azure-identity>=1.14.0
+
+# Web Framework (for inference)
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+
+# Utilities
+joblib>=1.3.0
+requests>=2.28.0
+

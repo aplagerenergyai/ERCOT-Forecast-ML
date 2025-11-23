@@ -1,0 +1,20 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+
+display_name: train_lightgbm
+code: .
+command: >
+  python train_lightgbm.py --data_path ./inputs/features/features.parquet
+
+environment: azureml:forecast-env@latest
+compute: cpu-cluster
+
+inputs:
+  features:
+    type: uri_file
+    path: azureml://datastores/workspaceblobstore/paths/features/features.parquet
+
+outputs:
+  model_output:
+    mode: rw_mount
+

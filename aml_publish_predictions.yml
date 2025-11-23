@@ -1,0 +1,20 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+code: .
+command: >
+  python publish_predictions.py
+  --input ${{inputs.predictions}}/predictions.parquet
+  --config config/settings.json
+environment: azureml:py310@latest
+compute: cpu-cluster
+
+inputs:
+  predictions:
+    type: uri_folder
+    description: Folder containing predictions parquet file
+
+outputs:
+  published:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/predictions/
+

@@ -1,0 +1,55 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: ERCOT_DART_Training_Pipeline
+description: Train three models (LightGBM, XGBoost, Deep Learning) in parallel to predict DART spread
+
+settings:
+  default_compute: cpu-cluster
+
+inputs:
+  features_input:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/features/
+
+outputs:
+  lgbm_model_output:
+    type: uri_folder
+  xgb_model_output:
+    type: uri_folder
+  deep_model_output:
+    type: uri_folder
+
+jobs:
+  train_lightgbm:
+    type: command
+    code: .
+    command: python train_lgbm.py
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    inputs:
+      features: ${{parent.inputs.features_input}}
+    outputs:
+      model: ${{parent.outputs.lgbm_model_output}}
+
+  train_xgboost:
+    type: command
+    code: .
+    command: python train_xgb.py
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    inputs:
+      features: ${{parent.inputs.features_input}}
+    outputs:
+      model: ${{parent.outputs.xgb_model_output}}
+
+  train_deep:
+    type: command
+    code: .
+    command: python train_deep.py
+    environment: azureml:py310@latest
+    compute: gpu-cluster
+    inputs:
+      features: ${{parent.inputs.features_input}}
+    outputs:
+      model: ${{parent.outputs.deep_model_output}}
+

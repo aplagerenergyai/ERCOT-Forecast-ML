@@ -1,0 +1,12 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+code: .
+command: >
+  python build_features.py
+environment: azureml:py310@latest
+compute: cpu-cluster
+
+outputs:
+  features:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/features/

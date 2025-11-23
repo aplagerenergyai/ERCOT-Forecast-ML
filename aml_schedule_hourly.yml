@@ -1,0 +1,22 @@
+$schema: https://azuremlschemas.azureedge.net/latest/schedule.schema.json
+name: ercot_hourly_prediction_schedule
+display_name: ERCOT Hourly Prediction Schedule
+description: Generates predictions every hour without retraining
+
+trigger:
+  type: recurrence
+  frequency: hour
+  interval: 1
+  schedule:
+    minutes: [5]
+  time_zone: America/Chicago
+
+create_job:
+  type: pipeline
+  job: file:aml_full_pipeline.yml
+  inputs:
+    retrain: false
+  settings:
+    default_compute: cpu-cluster
+    continue_on_step_failure: false
+

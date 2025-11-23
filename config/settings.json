@@ -1,0 +1,57 @@
+{
+  "pipeline": {
+    "name": "ERCOT DART Prediction Pipeline",
+    "version": "1.0.0",
+    "description": "Automated ML pipeline for ERCOT Day-Ahead Real-Time spread prediction"
+  },
+  
+  "scheduling": {
+    "retrain_frequency_days": 7,
+    "prediction_frequency_hours": 1,
+    "timezone": "America/Chicago"
+  },
+  
+  "compute": {
+    "cpu_cluster": "cpu-cluster",
+    "gpu_cluster": "gpu-cluster"
+  },
+  
+  "storage": {
+    "datastore": "workspaceblobstore",
+    "features_path": "azureml://datastores/workspaceblobstore/paths/features/",
+    "models_path": "azureml://datastores/workspaceblobstore/paths/models/",
+    "predictions_path": "azureml://datastores/workspaceblobstore/paths/predictions/"
+  },
+  
+  "output": {
+    "enable_blob_storage": true,
+    "enable_sql_publish": false,
+    "enable_notifications": false,
+    "prediction_format": "parquet",
+    "prediction_partitioning": "YYYY/MM/DD/HH"
+  },
+  
+  "notifications": {
+    "teams_webhook_url": "",
+    "slack_webhook_url": "",
+    "email_recipients": []
+  },
+  
+  "sql": {
+    "predictions_table": "[ERCOT].[predictions_dart_spread]",
+    "batch_size": 10000
+  },
+  
+  "models": {
+    "primary_model": "lgbm",
+    "fallback_models": ["xgb", "deep"],
+    "ensemble_enabled": false
+  },
+  
+  "monitoring": {
+    "drift_detection_enabled": true,
+    "alert_on_high_error": true,
+    "rmse_threshold": 10.0
+  }
+}
+

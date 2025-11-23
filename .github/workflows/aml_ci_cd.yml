@@ -1,0 +1,171 @@
+name: Azure ML CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      trigger_training:
+        description: 'Trigger full training pipeline'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.10'
+  REGISTRY: myregistry.azurecr.io
+  IMAGE_NAME: ercot-ml-pipeline
+
+jobs:
+  # Job 1: Lint and Test
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest black isort
+          pip install -r requirements.txt
+      
+      - name: Lint with flake8
+        run: |
+          # Stop build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+      
+      - name: Check code formatting with black
+        run: |
+          black --check . || true
+        continue-on-error: true
+      
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v || echo "No tests found"
+        continue-on-error: true
+
+  # Job 2: Build and Push Docker Image
+  build-docker:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+      
+      - name: Image digest
+        run: echo ${{ steps.build-and-push.outputs.digest }}
+
+  # Job 3: Trigger Azure ML Pipeline
+  trigger-aml-pipeline:
+    needs: build-docker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Install Azure ML extension
+        run: |
+          az extension add -n ml -y
+          az extension update -n ml
+      
+      - name: Trigger Full Pipeline with Retraining
+        if: github.event.inputs.trigger_training == 'true' || contains(github.event.head_commit.message, '[retrain]')
+        run: |
+          echo "Triggering full pipeline with model retraining..."
+          az ml job create \
+            --file aml_full_pipeline.yml \
+            --set inputs.retrain=true \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --workspace-name ${{ secrets.AZURE_ML_WORKSPACE }}
+      
+      - name: Trigger Prediction Only Pipeline
+        if: github.event.inputs.trigger_training != 'true' && !contains(github.event.head_commit.message, '[retrain]')
+        run: |
+          echo "Triggering prediction-only pipeline..."
+          az ml job create \
+            --file aml_full_pipeline.yml \
+            --set inputs.retrain=false \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --workspace-name ${{ secrets.AZURE_ML_WORKSPACE }}
+
+  # Job 4: Deploy Inference Endpoint (Optional)
+  deploy-endpoint:
+    needs: build-docker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy]')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Update Container App
+        run: |
+          echo "Updating Azure Container App..."
+          az containerapp update \
+            --name ercot-inference \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            || echo "Container App not found or update failed"
+

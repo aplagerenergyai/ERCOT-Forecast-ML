@@ -1,0 +1,23 @@
+$schema: https://azuremlschemas.azureedge.net/latest/schedule.schema.json
+name: ercot_daily_retrain_schedule
+display_name: ERCOT Daily Retrain Schedule
+description: Runs full pipeline daily at 5 AM CT with model retraining
+
+trigger:
+  type: recurrence
+  frequency: day
+  interval: 1
+  schedule:
+    hours: [5]
+    minutes: [0]
+  time_zone: America/Chicago
+
+create_job:
+  type: pipeline
+  job: file:aml_full_pipeline.yml
+  inputs:
+    retrain: true
+  settings:
+    default_compute: cpu-cluster
+    continue_on_step_failure: false
+

@@ -1,0 +1,18 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+code: .
+command: >
+  python train_deep.py
+environment: azureml:py310@latest
+compute: gpu-cluster
+
+inputs:
+  features:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/features/
+
+outputs:
+  model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/deep/
+

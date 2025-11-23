@@ -1,0 +1,139 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: ERCOT_Full_Production_Pipeline
+description: Complete automated pipeline - feature engineering, training, prediction, and publishing
+
+settings:
+  default_compute: cpu-cluster
+  continue_on_step_failure: false
+
+inputs:
+  retrain:
+    type: boolean
+    default: true
+    description: Whether to retrain models (true for daily, false for hourly)
+
+outputs:
+  final_predictions:
+    type: uri_folder
+  trained_models:
+    type: uri_folder
+
+jobs:
+  # Step 1: Build Features
+  build_features:
+    type: command
+    code: .
+    command: python build_features.py
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    outputs:
+      features:
+        type: uri_folder
+        path: azureml://datastores/workspaceblobstore/paths/features/
+
+  # Step 2: Train Models (conditional - only if retrain=true)
+  train_lightgbm:
+    type: command
+    code: .
+    command: python train_lgbm.py
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    inputs:
+      features: ${{parent.jobs.build_features.outputs.features}}
+    outputs:
+      model: ${{parent.outputs.trained_models}}/lgbm/
+    condition: ${{parent.inputs.retrain}}
+
+  train_xgboost:
+    type: command
+    code: .
+    command: python train_xgb.py
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    inputs:
+      features: ${{parent.jobs.build_features.outputs.features}}
+    outputs:
+      model: ${{parent.outputs.trained_models}}/xgb/
+    condition: ${{parent.inputs.retrain}}
+
+  train_deep:
+    type: command
+    code: .
+    command: python train_deep.py
+    environment: azureml:py310@latest
+    compute: gpu-cluster
+    inputs:
+      features: ${{parent.jobs.build_features.outputs.features}}
+    outputs:
+      model: ${{parent.outputs.trained_models}}/deep/
+    condition: ${{parent.inputs.retrain}}
+
+  # Step 3: Batch Inference (always runs)
+  batch_inference:
+    type: command
+    code: .
+    command: >
+      python -c "
+      import pandas as pd;
+      import pickle;
+      import os;
+      
+      # Load features
+      features = pd.read_parquet('${{inputs.features}}/hourly_features.parquet');
+      
+      # Load model
+      with open('${{inputs.model}}/lgbm_model.pkl', 'rb') as f:
+          model_data = pickle.load(f);
+      
+      # Make predictions
+      model = model_data['model'];
+      scaler = model_data['scaler'];
+      feature_cols = model_data['feature_columns'];
+      
+      X = features[feature_cols].fillna(0);
+      X_scaled = scaler.transform(X);
+      predictions = model.predict(X_scaled);
+      
+      # Create output DataFrame
+      output = pd.DataFrame({
+          'TimestampHour': features['TimestampHour'],
+          'SettlementPoint': features.get('SettlementPoint', 'SYSTEM'),
+          'DART_Prediction': predictions,
+          'ModelType': 'lgbm'
+      });
+      
+      # Save
+      os.makedirs('${{outputs.predictions}}', exist_ok=True);
+      output.to_parquet('${{outputs.predictions}}/predictions.parquet', index=False);
+      print(f'Generated {len(output)} predictions');
+      "
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    inputs:
+      features: ${{parent.jobs.build_features.outputs.features}}
+      model: ${{parent.outputs.trained_models}}/lgbm/
+    outputs:
+      predictions:
+        type: uri_folder
+    depends_on:
+      - build_features
+      - train_lightgbm
+
+  # Step 4: Publish Predictions
+  publish_predictions:
+    type: command
+    code: .
+    command: >
+      python publish_predictions.py
+      --input ${{inputs.predictions}}/predictions.parquet
+      --config config/settings.json
+    environment: azureml:py310@latest
+    compute: cpu-cluster
+    inputs:
+      predictions: ${{parent.jobs.batch_inference.outputs.predictions}}
+    outputs:
+      published: ${{parent.outputs.final_predictions}}
+    depends_on:
+      - batch_inference
+
