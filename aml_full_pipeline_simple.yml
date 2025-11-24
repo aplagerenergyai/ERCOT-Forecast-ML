@@ -12,7 +12,8 @@ jobs:
     type: command
     code: .
     command: python build_features_mock.py
-    environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+    environment:
+      image: ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
     outputs:
       features:
         type: uri_folder
