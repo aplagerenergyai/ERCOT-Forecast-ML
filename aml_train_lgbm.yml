@@ -11,7 +11,7 @@ compute: azureml:cpu-cluster
 inputs:
   features:
     type: uri_folder
-    path: azureml://jobs/funny_brain_3722xqqq7p/outputs/features
+    path: azureml://jobs/bright_pear_48v9qjx02n/outputs/features
 
 outputs:
   model:
