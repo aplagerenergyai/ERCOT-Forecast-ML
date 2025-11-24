@@ -1,0 +1,39 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: ERCOT_Real_Data_Pipeline
+description: Full feature engineering with real 200M records from SQL Server
+
+settings:
+  default_compute: azureml:cpu-cluster
+  continue_on_step_failure: false
+
+jobs:
+  build_features_real:
+    type: command
+    code: .
+    command: python build_features.py
+    environment:
+      image: ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
+    environment_variables:
+      SQL_SERVER: ${{parent.inputs.sql_server}}
+      SQL_DATABASE: ${{parent.inputs.sql_database}}
+      SQL_USERNAME: ${{parent.inputs.sql_username}}
+      SQL_PASSWORD: ${{parent.inputs.sql_password}}
+    outputs:
+      features:
+        type: uri_folder
+
+inputs:
+  sql_server:
+    type: string
+    default: "your-server.database.windows.net"
+  sql_database:
+    type: string
+    default: "YourDatabase"
+  sql_username:
+    type: string
+    default: "YourUsername"
+  sql_password:
+    type: string
+    default: "YourPassword"
+
