@@ -4,7 +4,7 @@ display_name: ERCOT_Real_Data_Pipeline
 description: Full feature engineering with real 200M records from SQL Server
 
 settings:
-  default_compute: azureml:cpu-cluster
+  default_compute: azureml:memory-cluster
   continue_on_step_failure: false
 
 jobs:
