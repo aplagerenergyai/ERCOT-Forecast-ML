@@ -1,0 +1,19 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: ERCOT_Simple_Pipeline
+description: Simplified pipeline for feature engineering only (to start)
+
+settings:
+  default_compute: azureml:cpu-cluster
+  continue_on_step_failure: false
+
+jobs:
+  build_features:
+    type: command
+    code: .
+    command: python build_features.py
+    environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
+    outputs:
+      features:
+        type: uri_folder
+

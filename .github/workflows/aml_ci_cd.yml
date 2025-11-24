@@ -128,23 +128,11 @@ jobs:
           az extension add -n ml -y
           az extension update -n ml
       
-      - name: Trigger Full Pipeline with Retraining
-        if: github.event.inputs.trigger_training == 'true' || contains(github.event.head_commit.message, '[retrain]')
+      - name: Trigger Simple Feature Pipeline
         run: |
-          echo "Triggering full pipeline with model retraining..."
+          echo "Triggering simple feature engineering pipeline..."
           az ml job create \
-            --file aml_full_pipeline.yml \
-            --set inputs.retrain_models=true \
-            --resource-group ${{ env.AZURE_ML_RESOURCE_GROUP }} \
-            --workspace-name ${{ env.AZURE_ML_WORKSPACE }}
-      
-      - name: Trigger Prediction Only Pipeline
-        if: github.event.inputs.trigger_training != 'true' && !contains(github.event.head_commit.message, '[retrain]')
-        run: |
-          echo "Triggering prediction-only pipeline..."
-          az ml job create \
-            --file aml_full_pipeline.yml \
-            --set inputs.retrain_models=false \
+            --file aml_full_pipeline_simple.yml \
             --resource-group ${{ env.AZURE_ML_RESOURCE_GROUP }} \
             --workspace-name ${{ env.AZURE_ML_WORKSPACE }}
 
