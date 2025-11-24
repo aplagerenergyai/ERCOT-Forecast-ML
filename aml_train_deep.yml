@@ -4,7 +4,7 @@ code: .
 command: >
   python train_deep.py
 environment: azureml:py310@latest
-compute: gpu-cluster
+compute: cpu-cluster  # Changed from gpu-cluster - GPU quota not available
 
 inputs:
   features:
