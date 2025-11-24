@@ -24,7 +24,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
+# Install system dependencies including ODBC drivers for SQL Server
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -35,6 +35,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     liblapack-dev \
     curl \
     ca-certificates \
+    gnupg \
+    apt-transport-https \
+    unixodbc \
+    unixodbc-dev \
+    && curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
+    && curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directory
