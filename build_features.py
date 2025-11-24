@@ -427,6 +427,9 @@ def process_sced_constraints(conn: pyodbc.Connection) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
     
+    # Fix column name case mismatch: DB has SCEDTimeStamp, code expects SCEDTimestamp
+    df = df.rename(columns={'SCEDTimeStamp': 'SCEDTimestamp'})
+    
     df = normalize_sced_timestamp(df)
     
     # Aggregate by hour and constraint
@@ -524,6 +527,9 @@ def process_solar_hourly(conn: pyodbc.Connection) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
     
+    # Fix column name case mismatch: DB has DELIVERY_DATE/HOUR_ENDING, code expects DeliveryDate/HourEnding
+    df = df.rename(columns={'DELIVERY_DATE': 'DeliveryDate', 'HOUR_ENDING': 'HourEnding'})
+    
     df = normalize_deliverydate_hourending(df)
     
     # Rename to final names
@@ -570,6 +576,9 @@ def process_wind_hourly(conn: pyodbc.Connection) -> pd.DataFrame:
     
     if df.empty:
         return pd.DataFrame()
+    
+    # Fix column name case mismatch: DB has DELIVERY_DATE/HOUR_ENDING, code expects DeliveryDate/HourEnding
+    df = df.rename(columns={'DELIVERY_DATE': 'DeliveryDate', 'HOUR_ENDING': 'HourEnding'})
     
     df = normalize_deliverydate_hourending(df)
     
