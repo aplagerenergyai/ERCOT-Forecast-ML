@@ -117,8 +117,9 @@ def normalize_operday_hourending(df: pd.DataFrame) -> pd.DataFrame:
 
 def normalize_deliverydate_hourending(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert DeliveryDate (datetime) + HourEnding (1-24) → TimestampHour.
+    Convert DeliveryDate (datetime) + HourEnding (1-24 or "01:00" format) → TimestampHour.
     DeliveryDate is already a datetime but may include time component.
+    Handles both integer format (1, 2, 24) and string time format ("01:00", "02:00", "24:00").
     """
     df = df.copy()
     
@@ -128,10 +129,33 @@ def normalize_deliverydate_hourending(df: pd.DataFrame) -> pd.DataFrame:
     # Extract just the date part
     df['DeliveryDateOnly'] = df['DeliveryDate'].dt.normalize()
     
-    # Add hour offset (HourEnding 1-24 → 0-23 hours)
-    df['TimestampHour'] = df['DeliveryDateOnly'] + pd.to_timedelta(df['HourEnding'] - 1, unit='h')
+    # Handle HourEnding in multiple formats (same parser as normalize_operday_hourending)
+    def parse_hour_ending(val):
+        """Convert HourEnding to integer (1-24) from various formats."""
+        if pd.isna(val):
+            return None
+        if isinstance(val, (int, float)):
+            return int(val)
+        if isinstance(val, str):
+            # Handle "01:00", "1:00", "24:00" format
+            if ':' in val:
+                hour_str = val.split(':')[0]
+                return int(hour_str)
+            # Handle string numbers "1", "24"
+            return int(val)
+        return int(val)
     
-    df = df.drop(columns=['DeliveryDateOnly'])
+    # Apply parser to handle both formats
+    df['HourEnding_Numeric'] = df['HourEnding'].apply(parse_hour_ending)
+    
+    # Drop rows where HourEnding could not be parsed
+    df.dropna(subset=['HourEnding_Numeric'], inplace=True)
+    df['HourEnding_Numeric'] = df['HourEnding_Numeric'].astype(int)
+    
+    # Add hour offset (HourEnding 1-24 → 0-23 hours)
+    df['TimestampHour'] = df['DeliveryDateOnly'] + pd.to_timedelta(df['HourEnding_Numeric'] - 1, unit='h')
+    
+    df = df.drop(columns=['DeliveryDateOnly', 'HourEnding_Numeric'])
     
     return df
 
