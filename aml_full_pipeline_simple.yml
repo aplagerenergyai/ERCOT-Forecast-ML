@@ -1,17 +1,17 @@
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
 type: pipeline
-display_name: ERCOT_Simple_Pipeline
-description: Simplified pipeline for feature engineering only (to start)
+display_name: ERCOT_Mock_Test_Pipeline
+description: Fast mock pipeline for testing infrastructure (uses synthetic data)
 
 settings:
   default_compute: azureml:cpu-cluster
   continue_on_step_failure: false
 
 jobs:
-  build_features:
+  build_features_mock:
     type: command
     code: .
-    command: python build_features.py
+    command: python build_features_mock.py
     environment: azureml:AzureML-sklearn-1.0-ubuntu20.04-py38-cpu@latest
     outputs:
       features:
