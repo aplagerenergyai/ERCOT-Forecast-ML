@@ -80,17 +80,37 @@ def get_sql_connection() -> pyodbc.Connection:
 
 def normalize_operday_hourending(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert OperDay (date) + HourEnding (1-24) → TimestampHour (datetime).
+    Convert OperDay (date) + HourEnding (1-24 or "01:00" format) → TimestampHour (datetime).
     HourEnding 1 = midnight-1am, 24 = 11pm-midnight.
+    Handles both integer format (1, 2, 24) and string time format ("01:00", "02:00", "24:00").
     """
     df = df.copy()
     
     # Convert OperDay to datetime if not already
     df['OperDay'] = pd.to_datetime(df['OperDay'])
     
+    # Handle HourEnding in multiple formats
+    def parse_hour_ending(val):
+        """Convert HourEnding to integer (1-24) from various formats."""
+        if pd.isna(val):
+            return None
+        if isinstance(val, (int, float)):
+            return int(val)
+        if isinstance(val, str):
+            # Handle "01:00", "1:00", "24:00" format
+            if ':' in val:
+                hour_str = val.split(':')[0]
+                return int(hour_str)
+            # Handle string numbers "1", "24"
+            return int(val)
+        return int(val)
+    
+    # Apply parser to handle both formats
+    df['HourEnding_Numeric'] = df['HourEnding'].apply(parse_hour_ending)
+    
     # HourEnding 1-24 → hour offset 0-23
     # HourEnding 1 means the hour ENDING at 1:00, so it starts at 0:00
-    df['TimestampHour'] = df['OperDay'] + pd.to_timedelta(df['HourEnding'] - 1, unit='h')
+    df['TimestampHour'] = df['OperDay'] + pd.to_timedelta(df['HourEnding_Numeric'] - 1, unit='h')
     
     return df
 
