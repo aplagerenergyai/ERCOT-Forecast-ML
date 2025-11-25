@@ -737,11 +737,10 @@ def main():
         logger.info(f"Start time: {datetime.now()}")
         
         # Get Azure ML output path
-        output_folder = os.environ.get("AZUREML_OUTPUT_features")
-        
-        if not output_folder:
-            logger.warning("AZUREML_OUTPUT_features not found, using local path")
-            output_folder = "data/features"
+        # In Azure ML v2 pipelines, we should ALWAYS use ./outputs/features
+        # This is automatically mapped to the pipeline's named output
+        output_folder = "./outputs/features"
+        logger.info(f"✓ Using Azure ML pipeline output path: {output_folder}")
         
         os.makedirs(output_folder, exist_ok=True)
         logger.info(f"Output folder: {output_folder}")

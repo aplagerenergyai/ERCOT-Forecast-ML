@@ -8,6 +8,7 @@ import os
 import sys
 import pickle
 import logging
+import argparse
 from datetime import datetime
 
 import numpy as np
@@ -52,7 +53,9 @@ def train_lightgbm(X_train, y_train, X_val, y_val):
         'max_depth': -1,
         'min_data_in_leaf': 20,
         'verbose': -1,
-        'n_jobs': -1
+        'device': 'gpu',  # GPU acceleration
+        'gpu_platform_id': 0,
+        'gpu_device_id': 0
     }
     
     logger.info("Hyperparameters:")
@@ -84,13 +87,25 @@ def train_lightgbm(X_train, y_train, X_val, y_val):
 def main():
     """Main training pipeline."""
     try:
+        # Parse command-line arguments
+        parser = argparse.ArgumentParser(description='Train LightGBM model for DART spread prediction')
+        parser.add_argument('--features_path', type=str, default=None, 
+                            help='Path to features directory or parquet file')
+        args = parser.parse_args()
+        
         logger.info("="*80)
         logger.info("LIGHTGBM TRAINING PIPELINE")
         logger.info("="*80)
         logger.info(f"Start time: {datetime.now()}")
         
         # Get features path
-        features_path = load_features_from_aml_input("features")
+        if args.features_path:
+            # Command-line argument provided (Azure ML v2 style)
+            features_path = os.path.join(args.features_path, "hourly_features.parquet")
+            logger.info(f"Using command-line features path: {features_path}")
+        else:
+            # Fallback to environment variable detection
+            features_path = load_features_from_aml_input("features")
         
         # Load and prepare data
         loader = ERCOTDataLoader(features_path)

@@ -1,0 +1,7 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: ercot_hourly_features
+description: ERCOT hourly features for DART spread prediction (23.2M rows, 41 columns)
+version: 1
+type: uri_folder
+path: azureml://datastores/workspaceblobstore/paths/ExperimentRun/dcid.c7fa16c4-0859-45a7-98c1-937b2e152ec4/outputs/features
+

@@ -51,8 +51,8 @@ def train_xgboost(X_train, y_train, X_val, y_val):
         'gamma': 0,
         'reg_alpha': 0.1,
         'reg_lambda': 1.0,
-        'tree_method': 'hist',
-        'n_jobs': -1,
+        'tree_method': 'gpu_hist',  # GPU acceleration
+        'device': 'cuda',  # Use GPU
         'random_state': 42
     }
     

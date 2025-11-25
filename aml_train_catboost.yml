@@ -1,12 +1,12 @@
 $schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
 type: command
-display_name: Train_DeepLearning_DART_Spread
+display_name: Train_CatBoost_DART_Spread
 code: .
 command: >
-  python train_deep.py
+  python train_catboost.py
 environment:
   image: ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
-compute: azureml:GPUClusterNC8asT4v3  # Changed from gpu-cluster - GPU quota not available
+compute: azureml:GPUClusterNC8asT4v3
 
 inputs:
   features:
@@ -16,5 +16,5 @@ inputs:
 outputs:
   model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/deep/
+    path: azureml://datastores/workspaceblobstore/paths/models/catboost/
 

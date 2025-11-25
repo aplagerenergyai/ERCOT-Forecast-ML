@@ -305,15 +305,79 @@ def load_features_from_aml_input(input_name: str = "features") -> str:
     Returns:
         Path to hourly_features.parquet
     """
-    input_path = os.environ.get(f"AZUREML_INPUT_{input_name}")
+    # DEBUG: Print all environment variables that contain "AZUREML" or "INPUT"
+    logger.info("🔍 Debugging Azure ML input detection:")
+    logger.info(f"  Current working directory: {os.getcwd()}")
+    logger.info(f"  Looking for input: {input_name}")
     
-    if input_path:
-        parquet_path = os.path.join(input_path, "hourly_features.parquet")
-        logger.info(f"Using Azure ML input path: {parquet_path}")
-        return parquet_path
+    relevant_env_vars = {k: v for k, v in os.environ.items() if 'AZUREML' in k or 'INPUT' in k or 'input' in k}
+    if relevant_env_vars:
+        logger.info("  Relevant environment variables:")
+        for key, value in relevant_env_vars.items():
+            logger.info(f"    {key} = {value[:100]}...")  # Truncate long paths
     else:
-        # Fallback for local testing
-        local_path = "data/features/hourly_features.parquet"
-        logger.warning(f"Azure ML input not found, using local path: {local_path}")
-        return local_path
+        logger.info("  No AZUREML/INPUT environment variables found")
+    
+    # List contents of current directory
+    try:
+        cwd_contents = os.listdir(os.getcwd())
+        logger.info(f"  Contents of current directory: {cwd_contents[:10]}")  # First 10 items
+    except Exception as e:
+        logger.info(f"  Could not list current directory: {e}")
+    
+    # Try multiple Azure ML v2 input patterns
+    possible_paths = [
+        # Azure ML v2 standard pattern: AZURE_ML_INPUT_<name>
+        os.environ.get(f"AZURE_ML_INPUT_{input_name}"),
+        os.environ.get(f"AZURE_ML_INPUT_{input_name.upper()}"),
+        os.environ.get(f"AZURE_ML_INPUT_{input_name.lower()}"),
+        # Alternative patterns
+        os.environ.get(f"azure_ml_input_{input_name}"),
+        os.environ.get(f"azure_ml_input_{input_name.lower()}"),
+        os.environ.get(f"AZUREML_DATAREFERENCE_{input_name}"),
+        os.environ.get(f"AZUREML_DATAREFERENCE_{input_name.upper()}"),
+        # Check if mounted at current working directory
+        os.path.join(os.getcwd(), input_name),
+        os.path.join(os.getcwd(), input_name.lower()),
+        os.path.join(os.getcwd(), input_name.upper()),
+    ]
+    
+    logger.info(f"  Checking {len(possible_paths)} possible paths...")
+    
+    for idx, base_path in enumerate(possible_paths):
+        if not base_path:
+            continue
+        logger.info(f"  [{idx+1}] Checking: {base_path}")
+        if os.path.exists(base_path):
+            logger.info(f"      ✓ Path exists!")
+            # Try to find hourly_features.parquet directly
+            parquet_path = os.path.join(base_path, "hourly_features.parquet")
+            if os.path.exists(parquet_path):
+                logger.info(f"✅ Using Azure ML input path: {parquet_path}")
+                return parquet_path
+            # Check if it's directly a parquet file
+            if os.path.isfile(base_path) and base_path.endswith('.parquet'):
+                logger.info(f"✅ Using Azure ML input file: {base_path}")
+                return base_path
+            # Search recursively for hourly_features.parquet in subdirectories
+            logger.info(f"      Searching recursively for hourly_features.parquet...")
+            import glob
+            recursive_search = glob.glob(os.path.join(base_path, "**/hourly_features.parquet"), recursive=True)
+            if recursive_search:
+                found_path = recursive_search[0]
+                logger.info(f"✅ Found parquet file recursively: {found_path}")
+                return found_path
+            # List what's in this directory
+            try:
+                contents = os.listdir(base_path)
+                logger.info(f"      Contents: {contents}")
+            except:
+                pass
+        else:
+            logger.info(f"      ✗ Path does not exist")
+    
+    # Fallback for local testing
+    local_path = "data/features/hourly_features.parquet"
+    logger.warning(f"⚠️  Azure ML input not found after checking all paths, using local path: {local_path}")
+    return local_path
 

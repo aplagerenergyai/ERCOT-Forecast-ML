@@ -7,22 +7,6 @@ settings:
   default_compute: azureml:memory-cluster
   continue_on_step_failure: false
 
-jobs:
-  build_features_real:
-    type: command
-    code: .
-    command: python build_features.py
-    environment:
-      image: ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
-    environment_variables:
-      SQL_SERVER: ${{parent.inputs.sql_server}}
-      SQL_DATABASE: ${{parent.inputs.sql_database}}
-      SQL_USERNAME: ${{parent.inputs.sql_username}}
-      SQL_PASSWORD: ${{parent.inputs.sql_password}}
-    outputs:
-      features:
-        type: uri_folder
-
 inputs:
   sql_server:
     type: string
@@ -36,4 +20,24 @@ inputs:
   sql_password:
     type: string
     default: "YourPassword"
+
+outputs:
+  features:
+    type: uri_folder
+
+jobs:
+  build_features_real:
+    type: command
+    code: .
+    command: python build_features.py
+    environment:
+      image: ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
+    compute: azureml:memory-cluster
+    environment_variables:
+      SQL_SERVER: ${{parent.inputs.sql_server}}
+      SQL_DATABASE: ${{parent.inputs.sql_database}}
+      SQL_USERNAME: ${{parent.inputs.sql_username}}
+      SQL_PASSWORD: ${{parent.inputs.sql_password}}
+    outputs:
+      features: ${{parent.outputs.features}}
 

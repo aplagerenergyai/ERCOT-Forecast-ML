@@ -20,7 +20,7 @@ YELLOW := \033[1;33m
 RED := \033[0;31m
 NC := \033[0m # No Color
 
-.PHONY: help build push run test shell clean stop logs
+.PHONY: help build push run test shell clean stop logs train validate
 
 help:  ## Show this help message
 	@echo "$(GREEN)ERCOT ML Pipeline - Docker Commands$(NC)"
@@ -154,6 +154,18 @@ ps:  ## Show running containers
 images:  ## List built images
 	@echo "$(GREEN)Built images:$(NC)"
 	@docker images | grep $(IMAGE_NAME) || echo "No images found"
+
+# ============================================================================
+# Azure ML Training Jobs
+# ============================================================================
+
+validate:  ## Validate parquet features file
+	@echo "$(GREEN)Validating feature parquet file$(NC)"
+	@python validate_parquet.py
+
+train:  ## Submit all training jobs to Azure ML
+	@echo "$(GREEN)Submitting training jobs to Azure ML$(NC)"
+	@bash run_training_jobs.sh
 
 # Azure Container Registry login
 acr-login:  ## Login to Azure Container Registry

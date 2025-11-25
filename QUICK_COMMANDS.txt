@@ -1,0 +1,77 @@
+=============================================================================
+ERCOT ML - Quick Commands to Run All New Models
+=============================================================================
+
+IMPORTANT: First rebuild Docker image (CatBoost was added to requirements.txt)
+See instructions at the end of this file.
+
+=============================================================================
+OPTION 1: Run Models in Parallel (Fastest - 40 minutes total)
+=============================================================================
+
+# Submit both at the same time:
+az ml job create --file aml_train_catboost.yml --workspace-name energyaiml-prod --resource-group rg-ercot-ml-production --query name -o tsv
+
+az ml job create --file aml_train_random_forest.yml --workspace-name energyaiml-prod --resource-group rg-ercot-ml-production --query name -o tsv
+
+# Wait 40 minutes for both to finish, then:
+az ml job create --file aml_train_ensemble.yml --workspace-name energyaiml-prod --resource-group rg-ercot-ml-production --query name -o tsv
+
+=============================================================================
+OPTION 2: Run Automated Script (Submits & Waits Sequentially)
+=============================================================================
+
+bash run_all_models.sh
+
+=============================================================================
+OPTION 3: Run One at a Time
+=============================================================================
+
+# 1. CatBoost (~30 min)
+az ml job create --file aml_train_catboost.yml \
+  --workspace-name energyaiml-prod \
+  --resource-group rg-ercot-ml-production \
+  --query name -o tsv
+
+# 2. Random Forest (~40 min)
+az ml job create --file aml_train_random_forest.yml \
+  --workspace-name energyaiml-prod \
+  --resource-group rg-ercot-ml-production \
+  --query name -o tsv
+
+# 3. Ensemble (~5 min) - ONLY after all others complete
+az ml job create --file aml_train_ensemble.yml \
+  --workspace-name energyaiml-prod \
+  --resource-group rg-ercot-ml-production \
+  --query name -o tsv
+
+=============================================================================
+REBUILD DOCKER IMAGE FIRST (Required for CatBoost)
+=============================================================================
+
+1. Commit the changes:
+   git add .
+   git commit -m "Add CatBoost, Random Forest, and Ensemble models"
+   git push
+
+2. GitHub Actions will automatically:
+   - Build new Docker image with CatBoost
+   - Push to ercotforecastingprod.azurecr.io
+   - Takes ~10 minutes
+
+3. Wait for GitHub Actions to complete:
+   https://github.com/YOUR_REPO/actions
+
+4. Then run the model training commands above
+
+=============================================================================
+OR: Manual Docker Build (Faster - 5 minutes)
+=============================================================================
+
+If you don't want to wait for GitHub Actions:
+
+docker build -t ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest .
+docker push ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
+
+=============================================================================
+
