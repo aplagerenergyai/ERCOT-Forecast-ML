@@ -1,0 +1,20 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: Train_TabNet_DART_Spread
+code: .
+command: >
+  python train_tabnet.py
+environment:
+  image: ercotforecastingprod.azurecr.io/ercot-ml-pipeline:latest
+compute: azureml:GPUClusterNC8asT4v3
+
+inputs:
+  features:
+    type: uri_folder
+    path: azureml:ercot_features_manual:1
+
+outputs:
+  model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/tabnet/
+
