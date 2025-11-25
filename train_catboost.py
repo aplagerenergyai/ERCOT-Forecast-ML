@@ -52,17 +52,14 @@ def train_catboost(X_train, y_train, X_val, y_val, categorical_features=None):
         logger.info(f"  {key}: {value}")
     logger.info("")
     
-    # Create CatBoost pools (handles categorical features natively)
-    train_pool = Pool(
-        X_train, 
-        y_train,
-        cat_features=categorical_features
-    )
-    val_pool = Pool(
-        X_val,
-        y_val,
-        cat_features=categorical_features
-    )
+    # Create CatBoost pools
+    # Note: categorical_features is None because data is pre-encoded
+    if categorical_features:
+        train_pool = Pool(X_train, y_train, cat_features=categorical_features)
+        val_pool = Pool(X_val, y_val, cat_features=categorical_features)
+    else:
+        train_pool = Pool(X_train, y_train)
+        val_pool = Pool(X_val, y_val)
     
     # Train model
     logger.info("Training with early stopping...")
@@ -93,18 +90,16 @@ def main():
         loader = ERCOTDataLoader(features_path)
         (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets()
         
-        # Get categorical feature indices (CatBoost can use them natively)
-        categorical_indices = [i for i, col in enumerate(loader.feature_columns) 
-                              if col in loader.categorical_columns]
-        
-        logger.info(f"Categorical features: {len(categorical_indices)}")
-        logger.info(f"  Features: {loader.categorical_columns}")
+        # Note: Categorical features are already encoded by dataloader (TargetEncoder)
+        # CatBoost will treat all features as numeric
+        logger.info("Note: Categorical features pre-encoded by TargetEncoder")
+        logger.info(f"  Original categorical columns: {loader.categorical_columns}")
         
         # Train model
         logger.info("="*80)
         logger.info("TRAINING CATBOOST MODEL")
         logger.info("="*80)
-        model = train_catboost(X_train, y_train, X_val, y_val, categorical_indices)
+        model = train_catboost(X_train, y_train, X_val, y_val, categorical_features=None)
         
         # Evaluate
         logger.info("")
