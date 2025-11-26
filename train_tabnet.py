@@ -63,8 +63,8 @@ def train_tabnet(X_train, y_train, X_val, y_val):
     # Train with early stopping
     logger.info("Training TabNet with early stopping...")
     model.fit(
-        X_train.values, y_train.values.reshape(-1, 1),
-        eval_set=[(X_val.values, y_val.values.reshape(-1, 1))],
+        X_train, y_train.reshape(-1, 1),
+        eval_set=[(X_val, y_val.reshape(-1, 1))],
         eval_metric=['rmse'],
         max_epochs=200,
         patience=20,
@@ -104,9 +104,9 @@ def main():
         logger.info("MODEL EVALUATION")
         logger.info("="*80)
         
-        y_train_pred = model.predict(X_train.values).flatten()
-        y_val_pred = model.predict(X_val.values).flatten()
-        y_test_pred = model.predict(X_test.values).flatten()
+        y_train_pred = model.predict(X_train).flatten()
+        y_val_pred = model.predict(X_val).flatten()
+        y_test_pred = model.predict(X_test).flatten()
         
         logger.info("")
         logger.info("Train Set Metrics:")

@@ -64,8 +64,8 @@ def train_ngboost(X_train, y_train, X_val, y_val):
     # Train with early stopping
     logger.info("Training NGBoost with early stopping...")
     model.fit(
-        X_train.values, y_train.values,
-        X_val=X_val.values, Y_val=y_val.values,
+        X_train, y_train,
+        X_val=X_val, Y_val=y_val,
         early_stopping_rounds=50
     )
     
@@ -101,9 +101,9 @@ def main():
         logger.info("="*80)
         
         # Get predictions (point estimates)
-        y_train_pred = model.predict(X_train.values)
-        y_val_pred = model.predict(X_val.values)
-        y_test_pred = model.predict(X_test.values)
+        y_train_pred = model.predict(X_train)
+        y_val_pred = model.predict(X_val)
+        y_test_pred = model.predict(X_test)
         
         logger.info("")
         logger.info("Train Set Metrics:")
@@ -123,7 +123,7 @@ def main():
         logger.info("PREDICTION INTERVALS (95% Confidence)")
         logger.info("="*80)
         
-        Y_dists = model.pred_dist(X_test.values)
+        Y_dists = model.pred_dist(X_test)
         intervals = Y_dists.interval(alpha=0.05)  # 95% CI
         lower = intervals[0]
         upper = intervals[1]

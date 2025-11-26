@@ -31,6 +31,17 @@ def train_histgb(X_train, y_train, X_val, y_val):
     Returns:
         Trained HistGradientBoosting model
     """
+    from sklearn.model_selection import train_test_split
+    
+    # Note: HistGradientBoostingRegressor doesn't support external validation sets
+    # We need to use validation_fraction for early stopping
+    # Combine train and val, then let the model split internally
+    X_combined = np.vstack([X_train, X_val])
+    y_combined = np.concatenate([y_train, y_val])
+    
+    # Calculate validation fraction based on actual sizes
+    val_fraction = len(X_val) / (len(X_train) + len(X_val))
+    
     # HistGradientBoosting parameters
     params = {
         'max_iter': 500,
@@ -39,7 +50,7 @@ def train_histgb(X_train, y_train, X_val, y_val):
         'min_samples_leaf': 20,
         'l2_regularization': 1.0,
         'early_stopping': True,
-        'validation_fraction': None,  # We provide validation set
+        'validation_fraction': val_fraction,  # Use calculated fraction
         'n_iter_no_change': 50,
         'random_state': 42,
         'verbose': 1,
@@ -53,9 +64,9 @@ def train_histgb(X_train, y_train, X_val, y_val):
     # Train model with early stopping
     logger.info("Training with early stopping...")
     model = HistGradientBoostingRegressor(**params)
-    model.fit(X_train, y_train, eval_set=[(X_val, y_val)])
+    model.fit(X_combined, y_combined)
     
-    logger.info(f"✓ Training complete. Best iteration: {model.n_iter_}")
+    logger.info(f"✓ Training complete. Total iterations: {model.n_iter_}")
     
     return model
 

@@ -18,22 +18,23 @@ from pytorch_forecasting.metrics import RMSE
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 
-from dataloader import load_features_from_aml_input
+from dataloader import ERCOTDataLoader, load_features_from_aml_input
 from metrics import evaluate_model
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-def train_tft(df_train, df_val, df_test, feature_columns):
+def train_tft(df_train, df_val, df_test, continuous_features, categorical_features):
     """
     Train Temporal Fusion Transformer.
     
     Args:
-        df_train: Training dataframe with TimestampHour
+        df_train: Training dataframe with TimestampHour and encoded features
         df_val: Validation dataframe
         df_test: Test dataframe
-        feature_columns: List of feature column names
+        continuous_features: List of continuous feature column names
+        categorical_features: List of categorical feature column names (already encoded)
     
     Returns:
         Trained TFT model
@@ -43,16 +44,19 @@ def train_tft(df_train, df_val, df_test, feature_columns):
     # Create time index (sequential integer)
     df_train['time_idx'] = (df_train['TimestampHour'] - df_train['TimestampHour'].min()).dt.total_seconds() / 3600
     df_train['time_idx'] = df_train['time_idx'].astype(int)
+    df_val['time_idx'] = (df_val['TimestampHour'] - df_train['TimestampHour'].min()).dt.total_seconds() / 3600
+    df_val['time_idx'] = df_val['time_idx'].astype(int)
     
-    # Add group ID (for multi-series, using SettlementPoint if available)
-    if 'SettlementPoint' in df_train.columns:
-        df_train['group_id'] = df_train['SettlementPoint']
-    else:
-        df_train['group_id'] = 'all'
+    # Add group ID (we'll use a single group since data is already encoded)
+    df_train['group_id'] = 'all'
+    df_val['group_id'] = 'all'
     
     # Define parameters
     max_prediction_length = 1  # Predict 1 hour ahead
     max_encoder_length = 24  # Use 24 hours of history
+    
+    # All features are now continuous (categorical were encoded)
+    all_features = continuous_features + categorical_features
     
     # Create TimeSeriesDataSet
     training = TimeSeriesDataSet(
@@ -63,7 +67,7 @@ def train_tft(df_train, df_val, df_test, feature_columns):
         max_encoder_length=max_encoder_length,
         max_prediction_length=max_prediction_length,
         time_varying_known_reals=["time_idx"],
-        time_varying_unknown_reals=[col for col in feature_columns if col in df_train.columns],
+        time_varying_unknown_reals=all_features,
         target_normalizer=None,  # Already normalized
     )
     
@@ -126,39 +130,50 @@ def main():
         # Get features path
         features_path = load_features_from_aml_input("features")
         
-        # Load data
+        # Load data using dataloader (handles encoding and normalization)
         logger.info(f"Loading features from: {features_path}")
-        df = pd.read_parquet(features_path)
-        logger.info(f"✓ Loaded {len(df):,} rows, {len(df.columns)} columns")
+        loader = ERCOTDataLoader(features_path)
         
-        # Create DART target
-        logger.info("Creating DART target variable...")
-        df['DART_Spread'] = df['DAM_Price_Hourly'] - df['RTM_LMP_HourlyAvg']
-        df = df.dropna(subset=['DART_Spread', 'DAM_Price_Hourly', 'RTM_LMP_HourlyAvg'])
-        logger.info(f"  Final dataset: {len(df):,} rows")
+        # Get the processed data as numpy arrays
+        (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets()
         
-        # Prepare features
-        exclude_cols = ['TimestampHour', 'DAM_Price_Hourly', 'RTM_LMP_HourlyAvg', 'DART_Spread']
-        feature_cols = [col for col in df.columns if col not in exclude_cols]
+        logger.info(f"Train: {len(X_train):,} rows")
+        logger.info(f"Val:   {len(X_val):,} rows")
+        logger.info(f"Test:  {len(X_test):,} rows")
         
-        # Time-based split
-        n_total = len(df)
+        # Convert back to DataFrames with original timestamp for TFT
+        # We need the original data with timestamps for time series structure
+        df_full = pd.read_parquet(features_path)
+        df_full['DART_Spread'] = df_full['DAM_Price_Hourly'] - df_full['RTM_LMP_HourlyAvg']
+        df_full = df_full.dropna(subset=['DART_Spread', 'DAM_Price_Hourly', 'RTM_LMP_HourlyAvg'])
+        
+        # Time-based split (same as loader)
+        n_total = len(df_full)
         n_train = int(n_total * 0.8)
         n_val = int(n_total * 0.9)
         
-        df_train = df.iloc[:n_train].copy()
-        df_val = df.iloc[n_train:n_val].copy()
-        df_test = df.iloc[n_val:].copy()
+        # Create DataFrames with processed features and timestamp
+        df_train = pd.DataFrame(X_train, columns=loader.feature_columns)
+        df_train['DART_Spread'] = y_train
+        df_train['TimestampHour'] = df_full['TimestampHour'].iloc[:n_train].values
         
-        logger.info(f"Train: {len(df_train):,} rows")
-        logger.info(f"Val:   {len(df_val):,} rows")
-        logger.info(f"Test:  {len(df_test):,} rows")
+        df_val = pd.DataFrame(X_val, columns=loader.feature_columns)
+        df_val['DART_Spread'] = y_val
+        df_val['TimestampHour'] = df_full['TimestampHour'].iloc[n_train:n_val].values
+        
+        df_test = pd.DataFrame(X_test, columns=loader.feature_columns)
+        df_test['DART_Spread'] = y_test
+        df_test['TimestampHour'] = df_full['TimestampHour'].iloc[n_val:].values
+        
+        # Get continuous and categorical features (all are continuous after encoding)
+        continuous_features = loader.continuous_columns
+        categorical_features = loader.categorical_columns  # Now encoded as continuous
         
         # Train model
         logger.info("="*80)
         logger.info("TRAINING TFT MODEL")
         logger.info("="*80)
-        model, trainer = train_tft(df_train, df_val, df_test, feature_cols)
+        model, trainer = train_tft(df_train, df_val, df_test, continuous_features, categorical_features)
         
         # Note: Evaluation would require proper time series setup
         # Simplified for now
