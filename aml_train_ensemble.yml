@@ -12,33 +12,34 @@ inputs:
   features:
     type: uri_folder
     path: azureml:ercot_features_manual:1
+  # Reference completed job outputs directly (not blob storage paths)
   lgbm_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/lgbm/
+    path: azureml://jobs/silver_egg_8qnwzpj2sl/outputs/model
   xgb_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/xgb/
+    path: azureml://jobs/mighty_ear_jlrxzxzt7g/outputs/model
   catboost_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/catboost/
+    path: azureml://jobs/maroon_camera_897lwtvxgh/outputs/model
   rf_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/random_forest/
+    path: azureml://jobs/patient_jelly_ygcvz566k7/outputs/model
   deep_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/deep/
+    path: azureml://jobs/stoic_board_tmmrlwm6gb/outputs/model
   histgb_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/histgb/
+    path: azureml://jobs/jolly_cheetah_360cptc56l/outputs/model
   extratrees_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/extratrees/
+    path: azureml://jobs/helpful_arch_997czfrfj6/outputs/model
   tabnet_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/tabnet/
+    path: azureml://jobs/loving_horse_mbmxvfdx6v/outputs/model
   automl_model:
     type: uri_folder
-    path: azureml://datastores/workspaceblobstore/paths/models/automl/
+    path: azureml://jobs/blue_yam_v1t1rnnhh0/outputs/model
 
 outputs:
   model:
