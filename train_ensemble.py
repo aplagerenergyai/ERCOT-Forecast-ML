@@ -121,14 +121,26 @@ def main():
                 
                 if input_path and os.path.exists(input_path):
                     logger.info(f"  Checking {input_name} at: {input_path}")
-                    # Look for .pkl or .pt files in the directory
-                    for file in os.listdir(input_path):
-                        if file.endswith('.pkl') or file.endswith('.pt'):
-                            model_key = input_name.replace('_model', '')
-                            full_path = os.path.join(input_path, file)
-                            model_paths[model_key] = full_path
-                            logger.info(f"    ✓ Found model file: {file}")
-                            break
+                    # List ALL files in the directory for debugging
+                    try:
+                        all_files = os.listdir(input_path)
+                        logger.info(f"    Directory contents ({len(all_files)} files): {all_files[:10]}")  # Show first 10
+                        
+                        # Look for .pkl or .pt files in the directory
+                        found = False
+                        for file in all_files:
+                            if file.endswith('.pkl') or file.endswith('.pt'):
+                                model_key = input_name.replace('_model', '')
+                                full_path = os.path.join(input_path, file)
+                                model_paths[model_key] = full_path
+                                logger.info(f"    ✓ Found model file: {file}")
+                                found = True
+                                break
+                        
+                        if not found:
+                            logger.warning(f"    ✗ No .pkl or .pt files found in {input_name}")
+                    except Exception as e:
+                        logger.warning(f"    ✗ Error listing directory: {e}")
                 else:
                     logger.warning(f"  ✗ {input_name} directory not found")
             except Exception as e:
