@@ -88,11 +88,12 @@ def main():
         # Get features path
         features_path = load_features_from_aml_input("features")
         
-        # Load and prepare data with memory optimization
+        # Load and prepare data with aggressive memory optimization
         loader = ERCOTDataLoader(features_path)
-        max_train_samples = 5_000_000  # 5M samples max for GPU memory
+        # Sample BEFORE split to prevent OOM during split operation
+        max_total_samples = 6_000_000  # 6M total samples (will become ~4.8M train, 600K val, 600K test)
         (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets(
-            max_train_samples=max_train_samples
+            max_total_samples=max_total_samples
         )
         
         # Train model

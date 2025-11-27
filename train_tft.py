@@ -134,10 +134,11 @@ def main():
         logger.info(f"Loading features from: {features_path}")
         loader = ERCOTDataLoader(features_path)
         
-        # Get the processed data as numpy arrays with memory optimization
-        max_train_samples = 2_000_000  # 2M samples max for TFT (more memory intensive)
+        # Get the processed data as numpy arrays with aggressive memory optimization
+        # Sample BEFORE split to prevent OOM during split operation
+        max_total_samples = 3_000_000  # 3M total samples (will become ~2.4M train, 300K val, 300K test)
         (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets(
-            max_train_samples=max_train_samples
+            max_total_samples=max_total_samples
         )
         
         logger.info(f"Train: {len(X_train):,} rows")
