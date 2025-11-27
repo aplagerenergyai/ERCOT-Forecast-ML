@@ -196,14 +196,26 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
             # Forward pass
             output = tft(x)
             
-            # Compute loss
-            # Output may be a dict with 'prediction' or direct tensor
-            if isinstance(output, dict):
+            # Extract predictions from output
+            # TFT returns an Output named tuple with 'prediction', 'attention', etc.
+            if hasattr(output, 'prediction'):
+                predictions = output.prediction
+            elif hasattr(output, 'output'):
+                predictions = output.output
+            elif isinstance(output, dict):
                 predictions = output.get('prediction', output.get('output', None))
                 if predictions is None:
                     predictions = list(output.values())[0]
-            else:
+            elif isinstance(output, torch.Tensor):
                 predictions = output
+            else:
+                # Fallback: try to get first attribute that's a tensor
+                for attr_name in dir(output):
+                    if not attr_name.startswith('_'):
+                        attr = getattr(output, attr_name)
+                        if isinstance(attr, torch.Tensor):
+                            predictions = attr
+                            break
             
             # Compute loss
             loss = loss_fn(predictions, y)
@@ -229,12 +241,24 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
                     x, y = batch
                     output = tft(x)
                     
-                    if isinstance(output, dict):
+                    # Extract predictions from Output named tuple
+                    if hasattr(output, 'prediction'):
+                        predictions = output.prediction
+                    elif hasattr(output, 'output'):
+                        predictions = output.output
+                    elif isinstance(output, dict):
                         predictions = output.get('prediction', output.get('output', None))
                         if predictions is None:
                             predictions = list(output.values())[0]
-                    else:
+                    elif isinstance(output, torch.Tensor):
                         predictions = output
+                    else:
+                        for attr_name in dir(output):
+                            if not attr_name.startswith('_'):
+                                attr = getattr(output, attr_name)
+                                if isinstance(attr, torch.Tensor):
+                                    predictions = attr
+                                    break
                     
                     loss = loss_fn(predictions, y)
                     val_loss += loss.item()
