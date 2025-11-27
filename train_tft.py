@@ -178,6 +178,9 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
         else:
             return batch
     
+    # Get the loss function
+    loss_fn = tft.loss
+    
     for epoch in range(20):  # 20 epochs
         epoch_loss = 0
         for batch_idx, batch in enumerate(train_dataloader):
@@ -185,10 +188,26 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
             batch = batch_to_device(batch, device)
             
             optimizer.zero_grad()
-            # TFT expects specific batch format
-            loss = tft.training_step(batch, batch_idx)
-            if isinstance(loss, dict):
-                loss = loss['loss']
+            
+            # Call forward pass directly (not training_step which needs trainer)
+            # Extract inputs from batch
+            x, y = batch
+            
+            # Forward pass
+            output = tft(x)
+            
+            # Compute loss
+            # Output may be a dict with 'prediction' or direct tensor
+            if isinstance(output, dict):
+                predictions = output.get('prediction', output.get('output', None))
+                if predictions is None:
+                    predictions = list(output.values())[0]
+            else:
+                predictions = output
+            
+            # Compute loss
+            loss = loss_fn(predictions, y)
+            
             loss.backward()
             torch.nn.utils.clip_grad_norm_(tft.parameters(), 0.1)
             optimizer.step()
@@ -206,9 +225,18 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
                     # Move validation batch to device
                     batch = batch_to_device(batch, device)
                     
-                    loss = tft.validation_step(batch, batch_idx)
-                    if isinstance(loss, dict):
-                        loss = loss['loss']
+                    # Extract and predict
+                    x, y = batch
+                    output = tft(x)
+                    
+                    if isinstance(output, dict):
+                        predictions = output.get('prediction', output.get('output', None))
+                        if predictions is None:
+                            predictions = list(output.values())[0]
+                    else:
+                        predictions = output
+                    
+                    loss = loss_fn(predictions, y)
                     val_loss += loss.item()
             val_loss /= len(val_dataloader)
             logger.info(f"  Validation Loss: {val_loss:.4f}")
