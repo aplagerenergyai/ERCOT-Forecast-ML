@@ -1,0 +1,63 @@
+================================================================================
+QUICK MODEL COMPARISON GUIDE
+================================================================================
+
+STEP 1: Check if jobs are done
+--------------------------------------------------------------------------------
+az ml job list --workspace-name energyaiml-prod \
+  --resource-group rg-ercot-ml-production \
+  --query "[?contains(display_name, 'DART')].{Name:name, DisplayName:display_name, Status:status}" \
+  --output table
+
+
+STEP 2: For each completed job, get metrics
+--------------------------------------------------------------------------------
+Go to: https://ml.azure.com
+  → Click job name
+  → "Outputs + logs" tab
+  → Open "user_logs/std_log.txt"
+  → Search: "Test Set Metrics:"
+  → Copy the MAE, RMSE, R², MAPE values
+
+
+STEP 3: Update compare_models.py
+--------------------------------------------------------------------------------
+Edit the manual_results dictionary:
+
+manual_results = {
+    'Train_LightGBM_DART_Spread': {'mae': 11.90, 'rmse': 124.05, 'r2': 0.0001, 'mape': 291.45},
+    'Train_XGBoost_DART_Spread': {'mae': 12.83, 'rmse': 125.20, 'r2': -0.0015, 'mape': 295.30},
+    # Add more here as they complete...
+}
+
+
+STEP 4: Run comparison
+--------------------------------------------------------------------------------
+python compare_models.py
+
+
+DONE! The script will show:
+  ✅ All models ranked by MAE (best first)
+  🏆 Winner (lowest MAE)
+  💰 Improvement over baseline
+
+================================================================================
+MODEL NAMES (for manual_results):
+================================================================================
+Train_LightGBM_DART_Spread
+Train_XGBoost_DART_Spread
+Train_DeepLearning_DART_Spread
+Train_CatBoost_DART_Spread
+Train_RandomForest_DART_Spread
+Train_Ensemble_DART_Spread
+Train_AutoML_DART_Spread
+Train_ExtraTrees_DART_Spread
+Train_HistGradientBoosting_DART_Spread
+Train_TabNet_DART_Spread
+Train_NGBoost_DART_Spread
+Train_TFT_DART_Spread
+
+================================================================================
+CURRENT BASELINE TO BEAT: $11.90 MAE (LightGBM)
+================================================================================
+
