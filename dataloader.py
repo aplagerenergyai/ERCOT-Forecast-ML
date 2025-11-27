@@ -42,8 +42,13 @@ class ERCOTDataLoader:
         self.categorical_columns = []
         self.continuous_columns = []
         
-    def load_data(self) -> pd.DataFrame:
-        """Load the parquet file from Azure ML storage."""
+    def load_data(self, sample_rows: int = None) -> pd.DataFrame:
+        """
+        Load the parquet file from Azure ML storage.
+        
+        Args:
+            sample_rows: Optional - sample this many rows during load (memory efficient)
+        """
         logger.info(f"Loading features from: {self.features_path}")
         
         if not os.path.exists(self.features_path):
@@ -51,6 +56,16 @@ class ERCOTDataLoader:
         
         df = pd.read_parquet(self.features_path)
         logger.info(f"✓ Loaded {len(df):,} rows, {len(df.columns)} columns")
+        
+        # Sample immediately after load if requested (before any processing)
+        if sample_rows is not None and len(df) > sample_rows:
+            logger.info(f"⚠️  Sampling dataset during load: {len(df):,} → {sample_rows:,} rows")
+            sample_indices = np.random.RandomState(42).choice(
+                len(df), size=sample_rows, replace=False
+            )
+            sample_indices.sort()  # Maintain temporal order
+            df = df.iloc[sample_indices].copy()
+            logger.info(f"✓ Dataset sampled to: {len(df):,} rows")
         
         return df
     
@@ -242,12 +257,12 @@ class ERCOTDataLoader:
         max_total_samples: int = None
     ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
         """
-        Full pipeline: load → target → [sample] → split → encode → standardize.
+        Full pipeline: [sample during load] → load → target → split → encode → standardize.
         
         Args:
             max_train_samples: Optional limit on training samples after split.
-            max_total_samples: Optional limit on total samples BEFORE split to reduce memory.
-                             Use this for GPU models with severe memory constraints.
+            max_total_samples: Optional limit on total samples - samples during LOAD operation.
+                             Most memory efficient - use this for GPU models with severe constraints.
         
         Returns:
             (X_train, y_train), (X_val, y_val), (X_test, y_test)
@@ -256,23 +271,11 @@ class ERCOTDataLoader:
         logger.info("STARTING DATA PREPARATION PIPELINE")
         logger.info("="*80)
         
-        # Load data
-        df = self.load_data()
+        # Load data with optional sampling (most memory efficient)
+        df = self.load_data(sample_rows=max_total_samples)
         
         # Create target
         df = self.create_target(df)
-        
-        # Memory optimization: Sample ENTIRE dataset before split if requested
-        # This prevents OOM during the split operation itself
-        if max_total_samples is not None and len(df) > max_total_samples:
-            logger.info(f"⚠️  Pre-split memory optimization: Dataset has {len(df):,} rows")
-            logger.info(f"   Sampling to {max_total_samples:,} rows BEFORE split")
-            sample_indices = np.random.RandomState(42).choice(
-                len(df), size=max_total_samples, replace=False
-            )
-            sample_indices.sort()  # Maintain temporal order
-            df = df.iloc[sample_indices].copy()
-            logger.info(f"✓ Sampled dataset: {len(df):,} rows")
         
         # Time-based split
         train_df, val_df, test_df = self.time_based_split(df)

@@ -90,8 +90,8 @@ def main():
         
         # Load and prepare data with aggressive memory optimization
         loader = ERCOTDataLoader(features_path)
-        # Sample BEFORE split to prevent OOM during split operation
-        max_total_samples = 6_000_000  # 6M total samples (will become ~4.8M train, 600K val, 600K test)
+        # Sample DURING LOAD to prevent OOM (most memory efficient)
+        max_total_samples = 3_000_000  # 3M total samples (→ ~2.4M train, 300K val, 300K test)
         (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets(
             max_total_samples=max_total_samples
         )
