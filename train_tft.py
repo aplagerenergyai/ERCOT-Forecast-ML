@@ -140,11 +140,30 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
     # Use manual training loop instead
     logger.warning("Using manual training loop to bypass pytorch_lightning compatibility issue")
     
-    optimizer = tft.configure_optimizers()
-    if isinstance(optimizer, tuple):
-        optimizer = optimizer[0][0]  # Extract optimizer from tuple
+    # Extract optimizer from configure_optimizers return value
+    opt_config = tft.configure_optimizers()
+    logger.info(f"Optimizer config type: {type(opt_config)}")
     
-    tft.to('cuda' if torch.cuda.is_available() else 'cpu')
+    # Handle different return formats from configure_optimizers
+    if isinstance(opt_config, dict):
+        # Dict format: {'optimizer': optimizer, 'lr_scheduler': ...}
+        optimizer = opt_config.get('optimizer', opt_config)
+    elif isinstance(opt_config, tuple):
+        # Tuple format: (optimizers, schedulers)
+        optimizer = opt_config[0]
+        if isinstance(optimizer, list):
+            optimizer = optimizer[0]
+    elif isinstance(opt_config, list):
+        # List format: [optimizer]
+        optimizer = opt_config[0]
+    else:
+        # Direct optimizer
+        optimizer = opt_config
+    
+    logger.info(f"Extracted optimizer type: {type(optimizer)}")
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    tft.to(device)
     tft.train()
     
     for epoch in range(20):  # 20 epochs
