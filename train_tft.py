@@ -14,7 +14,8 @@ import numpy as np
 import pandas as pd
 import torch
 from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
-from pytorch_forecasting.metrics import RMSE
+# Don't use pytorch_forecasting RMSE - has compatibility issues
+# from pytorch_forecasting.metrics import RMSE
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 
@@ -88,7 +89,8 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
     
     logger.info("Initializing Temporal Fusion Transformer...")
     
-    # TFT model
+    # TFT model - using plain PyTorch MSE loss instead of pytorch_forecasting RMSE
+    # to avoid compatibility issues with Output namedtuple
     tft = TemporalFusionTransformer.from_dataset(
         training,
         learning_rate=0.03,
@@ -96,8 +98,8 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
         attention_head_size=4,
         dropout=0.1,
         hidden_continuous_size=32,
-        output_size=7,  # Quantiles
-        loss=RMSE(),
+        output_size=1,  # Single point prediction (not quantiles)
+        loss=torch.nn.MSELoss(),  # Plain PyTorch loss
         reduce_on_plateau_patience=4,
     )
     
@@ -196,29 +198,30 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
             # Forward pass
             output = tft(x)
             
-            # Extract predictions from output
-            # TFT returns an Output named tuple with 'prediction', 'attention', etc.
+            # Extract predictions - TFT returns Output namedtuple
+            # For single output_size=1, prediction should be the first element
             if hasattr(output, 'prediction'):
                 predictions = output.prediction
-            elif hasattr(output, 'output'):
+            elif hasattr(output, 'output'):  
                 predictions = output.output
+            elif hasattr(output, '_asdict'):  # Named tuple
+                output_dict = output._asdict()
+                predictions = output_dict.get('prediction', list(output_dict.values())[0])
             elif isinstance(output, dict):
-                predictions = output.get('prediction', output.get('output', None))
-                if predictions is None:
-                    predictions = list(output.values())[0]
-            elif isinstance(output, torch.Tensor):
-                predictions = output
+                predictions = output.get('prediction', list(output.values())[0])
             else:
-                # Fallback: try to get first attribute that's a tensor
-                for attr_name in dir(output):
-                    if not attr_name.startswith('_'):
-                        attr = getattr(output, attr_name)
-                        if isinstance(attr, torch.Tensor):
-                            predictions = attr
-                            break
+                predictions = output
             
-            # Compute loss
-            loss = loss_fn(predictions, y)
+            # Ensure predictions is a tensor and squeeze if needed
+            if not isinstance(predictions, torch.Tensor):
+                predictions = torch.tensor(predictions, device=device)
+            
+            # MSELoss expects same shape - flatten both if needed
+            predictions = predictions.squeeze()
+            y_target = y.squeeze() if isinstance(y, torch.Tensor) else torch.tensor(y, device=device).squeeze()
+            
+            # Compute loss with plain MSE
+            loss = loss_fn(predictions, y_target)
             
             loss.backward()
             torch.nn.utils.clip_grad_norm_(tft.parameters(), 0.1)
@@ -241,26 +244,27 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
                     x, y = batch
                     output = tft(x)
                     
-                    # Extract predictions from Output named tuple
+                    # Extract predictions from Output namedtuple
                     if hasattr(output, 'prediction'):
                         predictions = output.prediction
                     elif hasattr(output, 'output'):
                         predictions = output.output
+                    elif hasattr(output, '_asdict'):
+                        output_dict = output._asdict()
+                        predictions = output_dict.get('prediction', list(output_dict.values())[0])
                     elif isinstance(output, dict):
-                        predictions = output.get('prediction', output.get('output', None))
-                        if predictions is None:
-                            predictions = list(output.values())[0]
-                    elif isinstance(output, torch.Tensor):
-                        predictions = output
+                        predictions = output.get('prediction', list(output.values())[0])
                     else:
-                        for attr_name in dir(output):
-                            if not attr_name.startswith('_'):
-                                attr = getattr(output, attr_name)
-                                if isinstance(attr, torch.Tensor):
-                                    predictions = attr
-                                    break
+                        predictions = output
                     
-                    loss = loss_fn(predictions, y)
+                    # Ensure tensor and proper shape
+                    if not isinstance(predictions, torch.Tensor):
+                        predictions = torch.tensor(predictions, device=device)
+                    
+                    predictions = predictions.squeeze()
+                    y_target = y.squeeze() if isinstance(y, torch.Tensor) else torch.tensor(y, device=device).squeeze()
+                    
+                    loss = loss_fn(predictions, y_target)
                     val_loss += loss.item()
             val_loss /= len(val_dataloader)
             logger.info(f"  Validation Loss: {val_loss:.4f}")
