@@ -15,7 +15,7 @@ import pandas as pd
 import torch
 from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.metrics import RMSE
-from pytorch_lightning import Trainer
+import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 
 from dataloader import ERCOTDataLoader, load_features_from_aml_input
@@ -99,7 +99,11 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
     early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
     lr_logger = LearningRateMonitor()
     
-    trainer = Trainer(
+    # Verify model is LightningModule
+    logger.info(f"Model type: {type(tft)}")
+    logger.info(f"Is LightningModule: {isinstance(tft, pl.LightningModule)}")
+    
+    trainer = pl.Trainer(
         max_epochs=50,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
@@ -109,11 +113,8 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
     )
     
     logger.info("Training TFT...")
-    trainer.fit(
-        tft,
-        train_dataloaders=train_dataloader,
-        val_dataloaders=val_dataloader,
-    )
+    # Use the simpler fit API
+    trainer.fit(tft, train_dataloader, val_dataloader)
     
     logger.info("✓ Training complete")
     
