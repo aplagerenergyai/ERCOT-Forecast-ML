@@ -12,34 +12,18 @@ inputs:
   features:
     type: uri_folder
     path: azureml:ercot_features_manual:1
-  # Reference completed job outputs using named output syntax
-  lgbm_model:
-    type: uri_folder
-    path: azureml:silver_egg_8qnwzpj2sl:outputs:model
-  xgb_model:
-    type: uri_folder
-    path: azureml:mighty_ear_jlrxzxzt7g:outputs:model
-  catboost_model:
-    type: uri_folder
-    path: azureml:maroon_camera_897lwtvxgh:outputs:model
-  rf_model:
-    type: uri_folder
-    path: azureml:patient_jelly_ygcvz566k7:outputs:model
-  deep_model:
-    type: uri_folder
-    path: azureml:stoic_board_tmmrlwm6gb:outputs:model
-  histgb_model:
-    type: uri_folder
-    path: azureml:jolly_cheetah_360cptc56l:outputs:model
-  extratrees_model:
-    type: uri_folder
-    path: azureml:helpful_arch_997czfrfj6:outputs:model
-  tabnet_model:
-    type: uri_folder
-    path: azureml:loving_horse_mbmxvfdx6v:outputs:model
-  automl_model:
-    type: uri_folder
-    path: azureml:blue_yam_v1t1rnnhh0:outputs:model
+
+environment_variables:
+  # Pass job IDs as environment variables - ensemble will download models programmatically
+  MODEL_JOB_LGBM: silver_egg_8qnwzpj2sl
+  MODEL_JOB_XGB: mighty_ear_jlrxzxzt7g
+  MODEL_JOB_CATBOOST: maroon_camera_897lwtvxgh
+  MODEL_JOB_RF: patient_jelly_ygcvz566k7
+  MODEL_JOB_DEEP: stoic_board_tmmrlwm6gb
+  MODEL_JOB_HISTGB: jolly_cheetah_360cptc56l
+  MODEL_JOB_EXTRATREES: helpful_arch_997czfrfj6
+  MODEL_JOB_TABNET: loving_horse_mbmxvfdx6v
+  MODEL_JOB_AUTOML: blue_yam_v1t1rnnhh0
 
 outputs:
   model:

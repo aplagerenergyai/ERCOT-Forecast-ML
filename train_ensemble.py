@@ -20,6 +20,55 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def download_model_from_job(job_name, output_name='model', local_dir='./downloaded_models'):
+    """
+    Download model artifacts from a completed Azure ML job.
+    
+    Args:
+        job_name: Name of the completed job (e.g., 'silver_egg_8qnwzpj2sl')
+        output_name: Name of the output (default: 'model')
+        local_dir: Local directory to download to
+    
+    Returns:
+        Path to downloaded model directory
+    """
+    try:
+        from azure.ai.ml import MLClient
+        from azure.identity import DefaultAzureCredential
+        
+        # Initialize ML Client
+        credential = DefaultAzureCredential()
+        ml_client = MLClient(
+            credential=credential,
+            subscription_id=os.environ.get('AZUREML_ARM_SUBSCRIPTION'),
+            resource_group_name=os.environ.get('AZUREML_ARM_RESOURCEGROUP'),
+            workspace_name=os.environ.get('AZUREML_ARM_WORKSPACE_NAME')
+        )
+        
+        # Download the output
+        job_output_dir = os.path.join(local_dir, job_name)
+        os.makedirs(job_output_dir, exist_ok=True)
+        
+        logger.info(f"  Downloading from job {job_name}...")
+        ml_client.jobs.download(
+            name=job_name,
+            download_path=job_output_dir,
+            output_name=output_name
+        )
+        
+        # The downloaded files will be in job_output_dir/named-outputs/model/
+        model_dir = os.path.join(job_output_dir, 'named-outputs', output_name)
+        if os.path.exists(model_dir):
+            return model_dir
+        else:
+            # Try without named-outputs prefix
+            return job_output_dir
+            
+    except Exception as e:
+        logger.warning(f"  Failed to download from {job_name}: {e}")
+        return None
+
+
 def load_model(model_path):
     """Load a pickled model."""
     try:
@@ -79,73 +128,50 @@ def main():
         logger.info("="*80)
         logger.info("LOADING INDIVIDUAL MODELS")
         logger.info("="*80)
+        logger.info("Downloading models from completed training jobs...")
         
-        # Try to load all available models from Azure ML input mounts
-        # In Azure ML, inputs are mounted at /mnt/azureml/cr/j/<job_id>/cap/data-capability/wd/INPUT_<name>
-        model_input_names = [
-            'lgbm_model', 'xgb_model', 'catboost_model', 'rf_model', 
-            'deep_model', 'histgb_model', 'extratrees_model', 
-            'tabnet_model', 'automl_model'
-        ]
+        # Map of model names to environment variable keys
+        model_job_mapping = {
+            'lgbm': 'MODEL_JOB_LGBM',
+            'xgb': 'MODEL_JOB_XGB',
+            'catboost': 'MODEL_JOB_CATBOOST',
+            'rf': 'MODEL_JOB_RF',
+            'deep': 'MODEL_JOB_DEEP',
+            'histgb': 'MODEL_JOB_HISTGB',
+            'extratrees': 'MODEL_JOB_EXTRATREES',
+            'tabnet': 'MODEL_JOB_TABNET',
+            'automl': 'MODEL_JOB_AUTOML',
+        }
         
         model_paths = {}
-        
-        # Find the Azure ML working directory base path
-        aml_base_path = None
-        if os.path.exists('/mnt/azureml/cr/j/'):
-            # Find the job directory
-            try:
-                job_dirs = os.listdir('/mnt/azureml/cr/j/')
-                if job_dirs:
-                    job_id = job_dirs[0]  # Should be only one
-                    aml_base_path = f'/mnt/azureml/cr/j/{job_id}/cap/data-capability/wd'
-                    logger.info(f"  Azure ML base path: {aml_base_path}")
-            except Exception as e:
-                logger.warning(f"  Could not determine Azure ML base path: {e}")
-        
-        for input_name in model_input_names:
-            # Try to find the model file in the input directory
-            try:
-                # Check Azure ML input path pattern
-                input_path = None
-                possible_paths = [
-                    f"{aml_base_path}/INPUT_{input_name}" if aml_base_path else None,
-                    f"./INPUT_{input_name}",
-                    f"./{input_name}",
-                ]
-                
-                for path in possible_paths:
-                    if path and os.path.exists(path):
-                        input_path = path
-                        break
-                
-                if input_path and os.path.exists(input_path):
-                    logger.info(f"  Checking {input_name} at: {input_path}")
-                    # List ALL files in the directory for debugging
-                    try:
-                        all_files = os.listdir(input_path)
-                        logger.info(f"    Directory contents ({len(all_files)} files): {all_files[:10]}")  # Show first 10
-                        
-                        # Look for .pkl or .pt files in the directory
-                        found = False
-                        for file in all_files:
-                            if file.endswith('.pkl') or file.endswith('.pt'):
-                                model_key = input_name.replace('_model', '')
-                                full_path = os.path.join(input_path, file)
-                                model_paths[model_key] = full_path
-                                logger.info(f"    ✓ Found model file: {file}")
-                                found = True
-                                break
-                        
-                        if not found:
-                            logger.warning(f"    ✗ No .pkl or .pt files found in {input_name}")
-                    except Exception as e:
-                        logger.warning(f"    ✗ Error listing directory: {e}")
-                else:
-                    logger.warning(f"  ✗ {input_name} directory not found")
-            except Exception as e:
-                logger.warning(f"  ✗ Could not load {input_name}: {e}")
+        for model_key, env_var in model_job_mapping.items():
+            job_name = os.environ.get(env_var)
+            if not job_name:
+                logger.warning(f"  ✗ {model_key}: No job ID in env var {env_var}")
                 continue
+            
+            logger.info(f"  Downloading {model_key} from job {job_name}...")
+            model_dir = download_model_from_job(job_name)
+            
+            if model_dir and os.path.exists(model_dir):
+                # Find model file in downloaded directory
+                try:
+                    for root, dirs, files in os.walk(model_dir):
+                        for file in files:
+                            if file.endswith('.pkl') or file.endswith('.pt'):
+                                full_path = os.path.join(root, file)
+                                model_paths[model_key] = full_path
+                                logger.info(f"    ✓ Found: {file}")
+                                break
+                        if model_key in model_paths:
+                            break
+                    
+                    if model_key not in model_paths:
+                        logger.warning(f"    ✗ No .pkl/.pt files found in downloaded directory")
+                except Exception as e:
+                    logger.warning(f"    ✗ Error searching directory: {e}")
+            else:
+                logger.warning(f"    ✗ Download failed or directory not found")
         
         models = {}
         for name, path in model_paths.items():
