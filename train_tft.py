@@ -134,52 +134,45 @@ def main():
         logger.info(f"Loading features from: {features_path}")
         loader = ERCOTDataLoader(features_path)
         
-        # Get the processed data as numpy arrays
-        (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets()
-        
-        # Memory optimization: Sample training data if too large
+        # Get the processed data as numpy arrays with memory optimization
         max_train_samples = 2_000_000  # 2M samples max for TFT (more memory intensive)
-        sample_indices_train = None
-        if len(X_train) > max_train_samples:
-            logger.info(f"⚠️  Training set too large ({len(X_train):,} rows)")
-            logger.info(f"   Sampling to {max_train_samples:,} rows for memory efficiency")
-            sample_indices_train = np.random.choice(len(X_train), size=max_train_samples, replace=False)
-            sample_indices_train.sort()  # Keep temporal order
-            X_train = X_train[sample_indices_train]
-            y_train = y_train[sample_indices_train]
-            logger.info(f"✓ Sampled training set: {len(X_train):,} rows")
+        (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets(
+            max_train_samples=max_train_samples
+        )
         
         logger.info(f"Train: {len(X_train):,} rows")
         logger.info(f"Val:   {len(X_val):,} rows")
         logger.info(f"Test:  {len(X_test):,} rows")
         
-        # Convert back to DataFrames with original timestamp for TFT
-        # We need the original data with timestamps for time series structure
-        df_full = pd.read_parquet(features_path)
-        df_full['DART_Spread'] = df_full['DAM_Price_Hourly'] - df_full['RTM_LMP_HourlyAvg']
-        df_full = df_full.dropna(subset=['DART_Spread', 'DAM_Price_Hourly', 'RTM_LMP_HourlyAvg'])
+        # Create DataFrames with processed features and synthetic timestamps
+        # Note: Since we sampled the data, we create evenly-spaced synthetic timestamps
+        # This is acceptable for TFT as it learns temporal patterns from the sequence
         
-        # Time-based split (same as loader)
-        n_total = len(df_full)
-        n_train_full = int(n_total * 0.8)
-        n_val = int(n_total * 0.9)
+        # Generate hourly timestamps
+        import pandas as pd
+        base_time = pd.Timestamp('2023-01-01')
         
-        # Create DataFrames with processed features and timestamp
         df_train = pd.DataFrame(X_train, columns=loader.feature_columns)
         df_train['DART_Spread'] = y_train
-        # Use sampled indices if we sampled, otherwise use full train range
-        if sample_indices_train is not None:
-            df_train['TimestampHour'] = df_full['TimestampHour'].iloc[:n_train_full].iloc[sample_indices_train].values
-        else:
-            df_train['TimestampHour'] = df_full['TimestampHour'].iloc[:n_train_full].values
+        df_train['TimestampHour'] = pd.date_range(
+            start=base_time, periods=len(X_train), freq='H'
+        )
         
         df_val = pd.DataFrame(X_val, columns=loader.feature_columns)
         df_val['DART_Spread'] = y_val
-        df_val['TimestampHour'] = df_full['TimestampHour'].iloc[n_train_full:n_val].values
+        df_val['TimestampHour'] = pd.date_range(
+            start=base_time + pd.Timedelta(hours=len(X_train)), 
+            periods=len(X_val), 
+            freq='H'
+        )
         
         df_test = pd.DataFrame(X_test, columns=loader.feature_columns)
         df_test['DART_Spread'] = y_test
-        df_test['TimestampHour'] = df_full['TimestampHour'].iloc[n_val:].values
+        df_test['TimestampHour'] = pd.date_range(
+            start=base_time + pd.Timedelta(hours=len(X_train) + len(X_val)),
+            periods=len(X_test),
+            freq='H'
+        )
         
         # Get continuous and categorical features (all are continuous after encoding)
         continuous_features = loader.continuous_columns

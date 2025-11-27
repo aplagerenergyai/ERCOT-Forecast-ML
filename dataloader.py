@@ -237,10 +237,16 @@ class ERCOTDataLoader:
         return train_df, val_df, test_df
     
     def prepare_datasets(
-        self
+        self,
+        max_train_samples: int = None
     ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
         """
         Full pipeline: load → target → split → encode → standardize.
+        
+        Args:
+            max_train_samples: Optional limit on training samples to reduce memory usage.
+                             If provided and train set is larger, will randomly sample while
+                             maintaining temporal order.
         
         Returns:
             (X_train, y_train), (X_val, y_val), (X_test, y_test)
@@ -257,6 +263,17 @@ class ERCOTDataLoader:
         
         # Time-based split
         train_df, val_df, test_df = self.time_based_split(df)
+        
+        # Memory optimization: Sample training data if requested
+        if max_train_samples is not None and len(train_df) > max_train_samples:
+            logger.info(f"⚠️  Memory optimization: Training set has {len(train_df):,} rows")
+            logger.info(f"   Sampling to {max_train_samples:,} rows")
+            sample_indices = np.random.RandomState(42).choice(
+                len(train_df), size=max_train_samples, replace=False
+            )
+            sample_indices.sort()  # Maintain temporal order
+            train_df = train_df.iloc[sample_indices].copy()
+            logger.info(f"✓ Sampled training set: {len(train_df):,} rows")
         
         # Identify features
         feature_info = self.identify_feature_columns(train_df)
