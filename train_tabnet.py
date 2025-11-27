@@ -92,6 +92,17 @@ def main():
         loader = ERCOTDataLoader(features_path)
         (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets()
         
+        # Memory optimization: Sample training data if too large
+        max_train_samples = 5_000_000  # 5M samples max for GPU memory
+        if len(X_train) > max_train_samples:
+            logger.info(f"⚠️  Training set too large ({len(X_train):,} rows)")
+            logger.info(f"   Sampling to {max_train_samples:,} rows for memory efficiency")
+            sample_indices = np.random.choice(len(X_train), size=max_train_samples, replace=False)
+            sample_indices.sort()  # Keep temporal order
+            X_train = X_train[sample_indices]
+            y_train = y_train[sample_indices]
+            logger.info(f"✓ Sampled training set: {len(X_train):,} rows")
+        
         # Train model
         logger.info("="*80)
         logger.info("TRAINING TABNET MODEL")

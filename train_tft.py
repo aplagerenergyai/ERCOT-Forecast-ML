@@ -137,6 +137,18 @@ def main():
         # Get the processed data as numpy arrays
         (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets()
         
+        # Memory optimization: Sample training data if too large
+        max_train_samples = 2_000_000  # 2M samples max for TFT (more memory intensive)
+        sample_indices_train = None
+        if len(X_train) > max_train_samples:
+            logger.info(f"⚠️  Training set too large ({len(X_train):,} rows)")
+            logger.info(f"   Sampling to {max_train_samples:,} rows for memory efficiency")
+            sample_indices_train = np.random.choice(len(X_train), size=max_train_samples, replace=False)
+            sample_indices_train.sort()  # Keep temporal order
+            X_train = X_train[sample_indices_train]
+            y_train = y_train[sample_indices_train]
+            logger.info(f"✓ Sampled training set: {len(X_train):,} rows")
+        
         logger.info(f"Train: {len(X_train):,} rows")
         logger.info(f"Val:   {len(X_val):,} rows")
         logger.info(f"Test:  {len(X_test):,} rows")
@@ -149,17 +161,21 @@ def main():
         
         # Time-based split (same as loader)
         n_total = len(df_full)
-        n_train = int(n_total * 0.8)
+        n_train_full = int(n_total * 0.8)
         n_val = int(n_total * 0.9)
         
         # Create DataFrames with processed features and timestamp
         df_train = pd.DataFrame(X_train, columns=loader.feature_columns)
         df_train['DART_Spread'] = y_train
-        df_train['TimestampHour'] = df_full['TimestampHour'].iloc[:n_train].values
+        # Use sampled indices if we sampled, otherwise use full train range
+        if sample_indices_train is not None:
+            df_train['TimestampHour'] = df_full['TimestampHour'].iloc[:n_train_full].iloc[sample_indices_train].values
+        else:
+            df_train['TimestampHour'] = df_full['TimestampHour'].iloc[:n_train_full].values
         
         df_val = pd.DataFrame(X_val, columns=loader.feature_columns)
         df_val['DART_Spread'] = y_val
-        df_val['TimestampHour'] = df_full['TimestampHour'].iloc[n_train:n_val].values
+        df_val['TimestampHour'] = df_full['TimestampHour'].iloc[n_train_full:n_val].values
         
         df_test = pd.DataFrame(X_test, columns=loader.feature_columns)
         df_test['DART_Spread'] = y_test
