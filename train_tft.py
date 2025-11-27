@@ -166,9 +166,24 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
     tft.to(device)
     tft.train()
     
+    # Helper function to move batch to device
+    def batch_to_device(batch, device):
+        """Recursively move all tensors in batch to device."""
+        if isinstance(batch, torch.Tensor):
+            return batch.to(device)
+        elif isinstance(batch, dict):
+            return {k: batch_to_device(v, device) for k, v in batch.items()}
+        elif isinstance(batch, (list, tuple)):
+            return type(batch)(batch_to_device(item, device) for item in batch)
+        else:
+            return batch
+    
     for epoch in range(20):  # 20 epochs
         epoch_loss = 0
         for batch_idx, batch in enumerate(train_dataloader):
+            # Move batch to same device as model
+            batch = batch_to_device(batch, device)
+            
             optimizer.zero_grad()
             # TFT expects specific batch format
             loss = tft.training_step(batch, batch_idx)
@@ -188,6 +203,9 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
             val_loss = 0
             with torch.no_grad():
                 for batch_idx, batch in enumerate(val_dataloader):
+                    # Move validation batch to device
+                    batch = batch_to_device(batch, device)
+                    
                     loss = tft.validation_step(batch, batch_idx)
                     if isinstance(loss, dict):
                         loss = loss['loss']
