@@ -14,18 +14,10 @@ import numpy as np
 import pandas as pd
 import torch
 from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
-# Don't use pytorch_forecasting RMSE - has compatibility issues
-# from pytorch_forecasting.metrics import RMSE
+# Use torchmetrics instead of pytorch_forecasting metrics for better compatibility
+from torchmetrics import MeanSquaredError
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
-
-# Monkey-patch to force TFT to pass isinstance check
-# This is a workaround for version incompatibility
-import pytorch_forecasting.models.base_model
-original_base = pytorch_forecasting.models.base_model.BaseModel
-if not issubclass(original_base, pl.LightningModule):
-    # Try to force the inheritance chain
-    pass  # Can't actually fix this at runtime
 
 from dataloader import ERCOTDataLoader, load_features_from_aml_input
 from metrics import evaluate_model
@@ -89,8 +81,8 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
     
     logger.info("Initializing Temporal Fusion Transformer...")
     
-    # TFT model - using plain PyTorch MSE loss instead of pytorch_forecasting RMSE
-    # to avoid compatibility issues with Output namedtuple
+    # TFT model - using torchmetrics MSE (Lightning Metric compatible)
+    # MeanSquaredError from torchmetrics works better than pytorch_forecasting RMSE
     tft = TemporalFusionTransformer.from_dataset(
         training,
         learning_rate=0.03,
@@ -99,7 +91,7 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
         dropout=0.1,
         hidden_continuous_size=32,
         output_size=1,  # Single point prediction (not quantiles)
-        loss=torch.nn.MSELoss(),  # Plain PyTorch loss
+        loss=MeanSquaredError(),  # torchmetrics Metric (required by TFT)
         reduce_on_plateau_patience=4,
     )
     
@@ -198,6 +190,12 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
             # Forward pass
             output = tft(x)
             
+            # Debug first iteration
+            if epoch == 0 and batch_idx == 0:
+                logger.info(f"First batch output type: {type(output)}")
+                if hasattr(output, '_fields'):
+                    logger.info(f"Output fields: {output._fields}")
+            
             # Extract predictions - TFT returns Output namedtuple
             # For single output_size=1, prediction should be the first element
             if hasattr(output, 'prediction'):
@@ -212,16 +210,18 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
             else:
                 predictions = output
             
-            # Ensure predictions is a tensor and squeeze if needed
+            # Debug extraction
+            if epoch == 0 and batch_idx == 0:
+                logger.info(f"Extracted predictions type: {type(predictions)}")
+                if isinstance(predictions, torch.Tensor):
+                    logger.info(f"Predictions shape: {predictions.shape}")
+            
+            # Ensure predictions is a tensor
             if not isinstance(predictions, torch.Tensor):
-                predictions = torch.tensor(predictions, device=device)
+                raise TypeError(f"Failed to extract tensor from output, got {type(predictions)}")
             
-            # MSELoss expects same shape - flatten both if needed
-            predictions = predictions.squeeze()
-            y_target = y.squeeze() if isinstance(y, torch.Tensor) else torch.tensor(y, device=device).squeeze()
-            
-            # Compute loss with plain MSE
-            loss = loss_fn(predictions, y_target)
+            # Use plain functional MSE for loss (torchmetrics is just for TFT init requirement)
+            loss = torch.nn.functional.mse_loss(predictions, y)
             
             loss.backward()
             torch.nn.utils.clip_grad_norm_(tft.parameters(), 0.1)
@@ -261,10 +261,8 @@ def train_tft(df_train, df_val, df_test, continuous_features, categorical_featur
                     if not isinstance(predictions, torch.Tensor):
                         predictions = torch.tensor(predictions, device=device)
                     
-                    predictions = predictions.squeeze()
-                    y_target = y.squeeze() if isinstance(y, torch.Tensor) else torch.tensor(y, device=device).squeeze()
-                    
-                    loss = loss_fn(predictions, y_target)
+                    # Use functional MSE for validation too
+                    loss = torch.nn.functional.mse_loss(predictions, y)
                     val_loss += loss.item()
             val_loss /= len(val_dataloader)
             logger.info(f"  Validation Loss: {val_loss:.4f}")
