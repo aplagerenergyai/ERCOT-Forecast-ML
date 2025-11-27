@@ -43,8 +43,10 @@ def train_tabnet(X_train, y_train, X_val, y_val):
         'lambda_sparse': 1e-4,  # Sparsity regularization
         'optimizer_fn': torch.optim.Adam,
         'optimizer_params': {'lr': 2e-2},
-        'scheduler_fn': torch.optim.lr_scheduler.ReduceLROnPlateau,
-        'scheduler_params': {'mode': 'min', 'patience': 10, 'factor': 0.5},
+        # Removed problematic ReduceLROnPlateau scheduler (compatibility issue)
+        # Using StepLR instead - reduces LR every 10 epochs
+        'scheduler_fn': torch.optim.lr_scheduler.StepLR,
+        'scheduler_params': {'step_size': 10, 'gamma': 0.5},
         'mask_type': 'entmax',
         'verbose': 10,
         'device_name': 'cuda' if torch.cuda.is_available() else 'cpu',
