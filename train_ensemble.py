@@ -81,7 +81,7 @@ def main():
         logger.info("="*80)
         
         # Try to load all available models from Azure ML input mounts
-        # Models are loaded from Azure blob storage paths
+        # In Azure ML, inputs are mounted at /mnt/azureml/cr/j/<job_id>/cap/data-capability/wd/INPUT_<name>
         model_input_names = [
             'lgbm_model', 'xgb_model', 'catboost_model', 'rf_model', 
             'deep_model', 'histgb_model', 'extratrees_model', 
@@ -89,19 +89,50 @@ def main():
         ]
         
         model_paths = {}
+        
+        # Find the Azure ML working directory base path
+        aml_base_path = None
+        if os.path.exists('/mnt/azureml/cr/j/'):
+            # Find the job directory
+            try:
+                job_dirs = os.listdir('/mnt/azureml/cr/j/')
+                if job_dirs:
+                    job_id = job_dirs[0]  # Should be only one
+                    aml_base_path = f'/mnt/azureml/cr/j/{job_id}/cap/data-capability/wd'
+                    logger.info(f"  Azure ML base path: {aml_base_path}")
+            except Exception as e:
+                logger.warning(f"  Could not determine Azure ML base path: {e}")
+        
         for input_name in model_input_names:
             # Try to find the model file in the input directory
             try:
-                model_dir = load_features_from_aml_input(input_name)
-                # Look for .pkl or .pt files in the directory
-                if os.path.exists(model_dir):
-                    for file in os.listdir(model_dir):
+                # Check Azure ML input path pattern
+                input_path = None
+                possible_paths = [
+                    f"{aml_base_path}/INPUT_{input_name}" if aml_base_path else None,
+                    f"./INPUT_{input_name}",
+                    f"./{input_name}",
+                ]
+                
+                for path in possible_paths:
+                    if path and os.path.exists(path):
+                        input_path = path
+                        break
+                
+                if input_path and os.path.exists(input_path):
+                    logger.info(f"  Checking {input_name} at: {input_path}")
+                    # Look for .pkl or .pt files in the directory
+                    for file in os.listdir(input_path):
                         if file.endswith('.pkl') or file.endswith('.pt'):
                             model_key = input_name.replace('_model', '')
-                            model_paths[model_key] = os.path.join(model_dir, file)
+                            full_path = os.path.join(input_path, file)
+                            model_paths[model_key] = full_path
+                            logger.info(f"    ✓ Found model file: {file}")
                             break
+                else:
+                    logger.warning(f"  ✗ {input_name} directory not found")
             except Exception as e:
-                logger.warning(f"  Could not load {input_name}: {e}")
+                logger.warning(f"  ✗ Could not load {input_name}: {e}")
                 continue
         
         models = {}
