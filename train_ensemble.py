@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def download_model_from_job(job_name, output_name='model', local_dir='./downloaded_models'):
     """
-    Download model artifacts from a completed Azure ML job.
+    Download model artifacts from a completed Azure ML job using az CLI.
     
     Args:
         job_name: Name of the completed job (e.g., 'silver_egg_8qnwzpj2sl')
@@ -32,37 +32,31 @@ def download_model_from_job(job_name, output_name='model', local_dir='./download
     Returns:
         Path to downloaded model directory
     """
+    import subprocess
+    
     try:
-        from azure.ai.ml import MLClient
-        from azure.identity import DefaultAzureCredential
-        
-        # Initialize ML Client
-        credential = DefaultAzureCredential()
-        ml_client = MLClient(
-            credential=credential,
-            subscription_id=os.environ.get('AZUREML_ARM_SUBSCRIPTION'),
-            resource_group_name=os.environ.get('AZUREML_ARM_RESOURCEGROUP'),
-            workspace_name=os.environ.get('AZUREML_ARM_WORKSPACE_NAME')
-        )
-        
-        # Download the output
         job_output_dir = os.path.join(local_dir, job_name)
         os.makedirs(job_output_dir, exist_ok=True)
         
-        logger.info(f"  Downloading from job {job_name}...")
-        ml_client.jobs.download(
-            name=job_name,
-            download_path=job_output_dir,
-            output_name=output_name
-        )
+        # Use az CLI to download job artifacts
+        cmd = [
+            'az', 'ml', 'job', 'download',
+            '--name', job_name,
+            '--output-name', output_name,
+            '--download-path', job_output_dir,
+            '--resource-group', os.environ.get('AZUREML_ARM_RESOURCEGROUP', 'rg-ercot-ml-production'),
+            '--workspace-name', os.environ.get('AZUREML_ARM_WORKSPACE_NAME', 'energyaiml-prod')
+        ]
         
-        # The downloaded files will be in job_output_dir/named-outputs/model/
-        model_dir = os.path.join(job_output_dir, 'named-outputs', output_name)
-        if os.path.exists(model_dir):
-            return model_dir
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            # Look for the downloaded files
+            if os.path.exists(job_output_dir):
+                return job_output_dir
         else:
-            # Try without named-outputs prefix
-            return job_output_dir
+            logger.warning(f"  az CLI download failed: {result.stderr}")
+            return None
             
     except Exception as e:
         logger.warning(f"  Failed to download from {job_name}: {e}")
