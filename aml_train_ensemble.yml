@@ -12,6 +12,33 @@ inputs:
   features:
     type: uri_folder
     path: azureml:ercot_features_manual:1
+  lgbm_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/lgbm/
+  xgb_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/xgb/
+  catboost_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/catboost/
+  rf_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/random_forest/
+  deep_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/deep/
+  histgb_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/histgb/
+  extratrees_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/extratrees/
+  tabnet_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/tabnet/
+  automl_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/models/automl/
 
 outputs:
   model:

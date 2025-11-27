@@ -67,22 +67,42 @@ def main():
         # Get features path
         features_path = load_features_from_aml_input("features")
         
-        # Load and prepare data
+        # Load and prepare data with memory limit
+        # Ensemble doesn't need full dataset - sample to avoid OOM
         loader = ERCOTDataLoader(features_path)
-        (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets()
+        max_total_samples = 2_000_000  # 2M total samples (→ ~1.6M train, 200K val, 200K test)
+        logger.info(f"📊 Using {max_total_samples:,} total samples to avoid OOM")
+        (X_train, y_train), (X_val, y_val), (X_test, y_test) = loader.prepare_datasets(
+            max_total_samples=max_total_samples
+        )
         
         logger.info("="*80)
         logger.info("LOADING INDIVIDUAL MODELS")
         logger.info("="*80)
         
-        # Try to load all available models
-        model_paths = {
-            'lgbm': './outputs/lgbm_model.pkl',
-            'xgb': './outputs/xgb_model.pkl',
-            'catboost': './outputs/catboost_model.pkl',
-            'random_forest': './outputs/random_forest_model.pkl',
-            'deep': './outputs/deep_model.pt',  # PyTorch model
-        }
+        # Try to load all available models from Azure ML input mounts
+        # Models are loaded from Azure blob storage paths
+        model_input_names = [
+            'lgbm_model', 'xgb_model', 'catboost_model', 'rf_model', 
+            'deep_model', 'histgb_model', 'extratrees_model', 
+            'tabnet_model', 'automl_model'
+        ]
+        
+        model_paths = {}
+        for input_name in model_input_names:
+            # Try to find the model file in the input directory
+            try:
+                model_dir = load_features_from_aml_input(input_name)
+                # Look for .pkl or .pt files in the directory
+                if os.path.exists(model_dir):
+                    for file in os.listdir(model_dir):
+                        if file.endswith('.pkl') or file.endswith('.pt'):
+                            model_key = input_name.replace('_model', '')
+                            model_paths[model_key] = os.path.join(model_dir, file)
+                            break
+            except Exception as e:
+                logger.warning(f"  Could not load {input_name}: {e}")
+                continue
         
         models = {}
         for name, path in model_paths.items():
@@ -113,13 +133,24 @@ def main():
                 import torch
                 model.eval()
                 with torch.no_grad():
-                    X_val_tensor = torch.FloatTensor(X_val.values)
-                    X_test_tensor = torch.FloatTensor(X_test.values)
+                    # X_val/X_test are already NumPy arrays from ERCOTDataLoader
+                    X_val_tensor = torch.FloatTensor(X_val)
+                    X_test_tensor = torch.FloatTensor(X_test)
                     val_pred = model(X_val_tensor).numpy().flatten()
                     test_pred = model(X_test_tensor).numpy().flatten()
+            elif name == 'tabnet':
+                # TabNet has specific predict method
+                val_pred = model.predict(X_val).flatten()
+                test_pred = model.predict(X_test).flatten()
             else:
+                # Standard sklearn-style predict
                 val_pred = model.predict(X_val)
                 test_pred = model.predict(X_test)
+                # Ensure flat arrays
+                if isinstance(val_pred, np.ndarray) and val_pred.ndim > 1:
+                    val_pred = val_pred.flatten()
+                if isinstance(test_pred, np.ndarray) and test_pred.ndim > 1:
+                    test_pred = test_pred.flatten()
             
             val_predictions[name] = val_pred
             test_predictions[name] = test_pred
