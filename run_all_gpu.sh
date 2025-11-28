@@ -3,8 +3,8 @@
 # ============================================================================
 # ERCOT ML - Run ALL Models on GPU (One Command)
 # ============================================================================
-# This submits all 6 models:
-# - 4 GPU models in parallel (CatBoost, Deep, LightGBM, XGBoost)
+# This submits all 9 models:
+# - 7 GPU models in parallel (CatBoost, Deep, LightGBM, XGBoost, TwoStage, RegimeClassifier, Quantile)
 # - 1 CPU model in parallel (Random Forest)
 # - 1 Ensemble after others complete
 # Total time: ~45 minutes
@@ -17,7 +17,7 @@ echo "════════════════════════�
 echo "  🎮 ERCOT ML - GPU Training (All Models)"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
-echo "Submitting 5 models in parallel..."
+echo "Submitting 8 models in parallel..."
 echo ""
 
 # Submit all models that can run in parallel
@@ -56,19 +56,43 @@ RF_JOB=$(az ml job create --file aml_train_random_forest.yml \
   --query name -o tsv 2>&1 | grep -v "^Class " | tail -1)
 echo "   ✓ Job ID: ${RF_JOB}"
 
+echo "6. Two-Stage Model (GPU) - ~2 min"
+TWOSTAGE_JOB=$(az ml job create --file aml_train_two_stage.yml \
+  --workspace-name ${WORKSPACE} \
+  --resource-group ${RESOURCE_GROUP} \
+  --query name -o tsv 2>&1 | grep -v "^Class " | tail -1)
+echo "   ✓ Job ID: ${TWOSTAGE_JOB}"
+
+echo "7. Regime Classifier (GPU) - ~2 min"
+REGIME_JOB=$(az ml job create --file aml_train_regime_classifier.yml \
+  --workspace-name ${WORKSPACE} \
+  --resource-group ${RESOURCE_GROUP} \
+  --query name -o tsv 2>&1 | grep -v "^Class " | tail -1)
+echo "   ✓ Job ID: ${REGIME_JOB}"
+
+echo "8. Quantile Regression (GPU) - ~3 min"
+QUANTILE_JOB=$(az ml job create --file aml_train_quantile.yml \
+  --workspace-name ${WORKSPACE} \
+  --resource-group ${RESOURCE_GROUP} \
+  --query name -o tsv 2>&1 | grep -v "^Class " | tail -1)
+echo "   ✓ Job ID: ${QUANTILE_JOB}"
+
 echo ""
 echo "════════════════════════════════════════════════════════════════"
-echo "  ✅ All 5 models submitted!"
+echo "  ✅ All 8 models submitted!"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 echo "Monitor at: https://ml.azure.com"
 echo ""
 echo "Job IDs:"
-echo "  CatBoost:      ${CATBOOST_JOB}"
-echo "  Deep Learning: ${DEEP_JOB}"
-echo "  LightGBM:      ${LGBM_JOB}"
-echo "  XGBoost:       ${XGB_JOB}"
-echo "  Random Forest: ${RF_JOB}"
+echo "  CatBoost:          ${CATBOOST_JOB}"
+echo "  Deep Learning:     ${DEEP_JOB}"
+echo "  LightGBM:          ${LGBM_JOB}"
+echo "  XGBoost:           ${XGB_JOB}"
+echo "  Random Forest:     ${RF_JOB}"
+echo "  Two-Stage:         ${TWOSTAGE_JOB}"
+echo "  Regime Classifier: ${REGIME_JOB}"
+echo "  Quantile:          ${QUANTILE_JOB}"
 echo ""
 echo "Expected completion: ~45 minutes (Random Forest takes longest)"
 echo ""
@@ -93,13 +117,19 @@ while true; do
     LGBM_STATUS=$(check_job_status ${LGBM_JOB})
     XGB_STATUS=$(check_job_status ${XGB_JOB})
     RF_STATUS=$(check_job_status ${RF_JOB})
+    TWOSTAGE_STATUS=$(check_job_status ${TWOSTAGE_JOB})
+    REGIME_STATUS=$(check_job_status ${REGIME_JOB})
+    QUANTILE_STATUS=$(check_job_status ${QUANTILE_JOB})
     
     echo "Status:"
-    echo "  CatBoost:      ${CATBOOST_STATUS}"
-    echo "  Deep Learning: ${DEEP_STATUS}"
-    echo "  LightGBM:      ${LGBM_STATUS}"
-    echo "  XGBoost:       ${XGB_STATUS}"
-    echo "  Random Forest: ${RF_STATUS}"
+    echo "  CatBoost:          ${CATBOOST_STATUS}"
+    echo "  Deep Learning:     ${DEEP_STATUS}"
+    echo "  LightGBM:          ${LGBM_STATUS}"
+    echo "  XGBoost:           ${XGB_STATUS}"
+    echo "  Random Forest:     ${RF_STATUS}"
+    echo "  Two-Stage:         ${TWOSTAGE_STATUS}"
+    echo "  Regime Classifier: ${REGIME_STATUS}"
+    echo "  Quantile:          ${QUANTILE_STATUS}"
     echo ""
     
     # Check if all are complete
@@ -107,7 +137,10 @@ while true; do
        [[ "${DEEP_STATUS}" == "Completed" ]] && \
        [[ "${LGBM_STATUS}" == "Completed" ]] && \
        [[ "${XGB_STATUS}" == "Completed" ]] && \
-       [[ "${RF_STATUS}" == "Completed" ]]; then
+       [[ "${RF_STATUS}" == "Completed" ]] && \
+       [[ "${TWOSTAGE_STATUS}" == "Completed" ]] && \
+       [[ "${REGIME_STATUS}" == "Completed" ]] && \
+       [[ "${QUANTILE_STATUS}" == "Completed" ]]; then
         echo "✅ All models completed!"
         break
     fi
@@ -117,7 +150,10 @@ while true; do
        [[ "${DEEP_STATUS}" == "Failed" ]] || \
        [[ "${LGBM_STATUS}" == "Failed" ]] || \
        [[ "${XGB_STATUS}" == "Failed" ]] || \
-       [[ "${RF_STATUS}" == "Failed" ]]; then
+       [[ "${RF_STATUS}" == "Failed" ]] || \
+       [[ "${TWOSTAGE_STATUS}" == "Failed" ]] || \
+       [[ "${REGIME_STATUS}" == "Failed" ]] || \
+       [[ "${QUANTILE_STATUS}" == "Failed" ]]; then
         echo "❌ One or more jobs failed. Check logs at https://ml.azure.com"
         exit 1
     fi

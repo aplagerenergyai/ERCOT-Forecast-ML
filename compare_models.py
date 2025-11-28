@@ -49,39 +49,91 @@ def get_completed_jobs() -> List[Dict]:
 
 
 def print_comparison_table(results: List[Tuple[str, str, Dict[str, float]]]):
-    """Print formatted comparison table."""
-    print("\n" + "="*100)
-    print("  🏆 ERCOT DART MODEL COMPARISON")
-    print("="*100)
-    print(f"\n{'Model':<40} {'Test MAE':<15} {'Test RMSE':<15} {'Test R²':<12} {'Status':<10}")
-    print("-"*100)
+    """Print formatted comparison table for regression models."""
+    # Separate regression and classification models
+    regression_results = []
+    classification_results = []
     
-    # Sort by MAE (best first)
-    sorted_results = sorted(results, key=lambda x: x[2]['mae'] if x[2]['mae'] is not None else float('inf'))
+    for display_name, job_name, metrics in results:
+        # Check if it's a classification model (has 'accuracy' but not 'mae')
+        if 'accuracy' in metrics and 'mae' not in metrics:
+            classification_results.append((display_name, job_name, metrics))
+        # Check if it's a regression model (has 'mae')
+        elif 'mae' in metrics:
+            regression_results.append((display_name, job_name, metrics))
     
-    for display_name, job_name, metrics in sorted_results:
-        mae = f"${metrics['mae']:.2f}" if metrics['mae'] is not None else "Check logs"
-        rmse = f"${metrics['rmse']:.2f}" if metrics['rmse'] is not None else "Check logs"
-        r2 = f"{metrics['r2']:.4f}" if metrics['r2'] is not None else "Check logs"
+    # ========================================================================
+    # REGRESSION MODELS TABLE
+    # ========================================================================
+    if regression_results:
+        print("\n" + "="*120)
+        print("  🏆 ERCOT DART REGRESSION MODELS - POINT PREDICTION")
+        print("="*120)
+        print(f"\n{'Model':<40} {'Test MAE':<15} {'Test RMSE':<15} {'Test R²':<12} {'Extra Info':<25} {'Status':<10}")
+        print("-"*120)
         
-        # Add emoji for top 3
-        rank_emoji = ""
-        if metrics['mae'] is not None:
-            if sorted_results.index((display_name, job_name, metrics)) == 0:
-                rank_emoji = "🥇"
-            elif sorted_results.index((display_name, job_name, metrics)) == 1:
-                rank_emoji = "🥈"
-            elif sorted_results.index((display_name, job_name, metrics)) == 2:
-                rank_emoji = "🥉"
+        # Sort by MAE (best first)
+        sorted_results = sorted(
+            regression_results, 
+            key=lambda x: x[2]['mae'] if x[2]['mae'] is not None else float('inf')
+        )
         
-        print(f"{display_name:<40} {mae:<15} {rmse:<15} {r2:<12} {'✅'} {rank_emoji}")
+        for display_name, job_name, metrics in sorted_results:
+            mae = f"${metrics['mae']:.2f}" if metrics['mae'] is not None else "Check logs"
+            rmse = f"${metrics['rmse']:.2f}" if metrics['rmse'] is not None else "Check logs"
+            r2 = f"{metrics['r2']:.4f}" if metrics['r2'] is not None else "Check logs"
+            
+            # Extra info for special models
+            extra_info = ""
+            if 'coverage_80' in metrics and metrics['coverage_80'] is not None:
+                # Quantile model
+                extra_info = f"Coverage: {metrics['coverage_80']*100:.1f}%"
+            elif 'model_type' in metrics:
+                extra_info = metrics['model_type']
+            
+            # Add emoji for top 3
+            rank_emoji = ""
+            if metrics['mae'] is not None:
+                idx = sorted_results.index((display_name, job_name, metrics))
+                if idx == 0:
+                    rank_emoji = "🥇"
+                elif idx == 1:
+                    rank_emoji = "🥈"
+                elif idx == 2:
+                    rank_emoji = "🥉"
+            
+            print(f"{display_name:<40} {mae:<15} {rmse:<15} {r2:<12} {extra_info:<25} {'✅'} {rank_emoji}")
+        
+        print("-"*120)
     
-    print("-"*100)
+    # ========================================================================
+    # CLASSIFICATION MODELS TABLE
+    # ========================================================================
+    if classification_results:
+        print("\n" + "="*100)
+        print("  🎯 ERCOT DART CLASSIFICATION MODELS - REGIME PREDICTION")
+        print("="*100)
+        print(f"\n{'Model':<40} {'Test Accuracy':<20} {'Test F1 (Macro)':<20} {'Status':<10}")
+        print("-"*100)
+        
+        for display_name, job_name, metrics in classification_results:
+            accuracy = f"{metrics['accuracy']:.4f} ({metrics['accuracy']*100:.2f}%)" if metrics.get('accuracy') is not None else "Check logs"
+            f1_macro = f"{metrics['f1_macro']:.4f}" if metrics.get('f1_macro') is not None else "Check logs"
+            
+            print(f"{display_name:<40} {accuracy:<20} {f1_macro:<20} {'✅'}")
+        
+        print("-"*100)
+        print("\nNote: Classification models predict regime (magnitude bucket), not exact DART value.")
+        print("      They are not directly comparable to regression models.")
 
 
 def find_best_model(results: List[Tuple[str, str, Dict[str, float]]]) -> Tuple[str, Dict[str, float]]:
-    """Find the model with lowest MAE."""
-    valid_results = [(name, metrics) for name, _, metrics in results if metrics['mae'] is not None]
+    """Find the regression model with lowest MAE."""
+    # Only consider regression models (have 'mae')
+    valid_results = [
+        (name, metrics) for name, _, metrics in results 
+        if 'mae' in metrics and metrics['mae'] is not None
+    ]
     
     if not valid_results:
         return None, None
@@ -123,24 +175,77 @@ def main():
     # ============================================================================
     
     manual_results = {
-        # Example format:
-        # 'Train_LightGBM_DART_Spread': {'mae': 11.90, 'rmse': 124.05, 'r2': 0.0001, 'mape': 291.45},
+        # ========================================================================
+        # REGRESSION MODELS - Predict exact DART spread value
+        # ========================================================================
+        # Format: {'mae': float, 'rmse': float, 'r2': float, 'mape': float}
         
         # Current known results:
-        'Train_LightGBM_DART_Spread': {'mae': 11.90, 'rmse': 124.05, 'r2': 0.0001, 'mape': 291.45},
-        'Train_XGBoost_DART_Spread': {'mae': 12.83, 'rmse': 125.20, 'r2': -0.0015, 'mape': 295.30},
+        'Train_LightGBM_DART_Spread': {
+            'mae': 11.90, 'rmse': 124.05, 'r2': 0.0001, 'mape': 291.45
+        },
+        'Train_XGBoost_DART_Spread': {
+            'mae': 12.83, 'rmse': 125.20, 'r2': -0.0015, 'mape': 295.30
+        },
         
         # Add these when they complete:
-        # 'Train_CatBoost_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_DeepLearning_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_RandomForest_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_ExtraTrees_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_HistGradientBoosting_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_TabNet_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_NGBoost_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_TFT_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_AutoML_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
-        # 'Train_Ensemble_DART_Spread': {'mae': None, 'rmse': None, 'r2': None, 'mape': None},
+        # 'Train_CatBoost_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        # 'Train_DeepLearning_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        # 'Train_RandomForest_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        # 'Train_ExtraTrees_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        # 'Train_HistGradientBoosting_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        # 'Train_AutoML_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        # 'Train_Ensemble_DART_Spread': {
+        #     'mae': None, 'rmse': None, 'r2': None, 'mape': None
+        # },
+        
+        # ========================================================================
+        # TWO-STAGE MODEL - Predicts DA and RT separately, then computes DART
+        # ========================================================================
+        # Use DART predictions (RT_pred - DA_pred) and compute MAE/RMSE
+        # Format: Same as regression models
+        # 'Train_TwoStage_DART_Model': {
+        #     'mae': None,  # From DART spread predictions
+        #     'rmse': None,  # From DART spread predictions
+        #     'r2': None,
+        #     'mape': None,
+        #     'model_type': 'Two-Stage'
+        # },
+        
+        # ========================================================================
+        # QUANTILE MODEL - Predicts P10, P50, P90
+        # ========================================================================
+        # Use P50 (median) for MAE/RMSE, add coverage_80 for calibration
+        # Format: {'mae': float (P50), 'rmse': float (P50), 'r2': float (P50), 'coverage_80': float}
+        # 'Train_Quantile_DART_Model': {
+        #     'mae': None,  # MAE of P50 (median) predictions
+        #     'rmse': None,  # RMSE of P50 (median) predictions
+        #     'r2': None,  # R² of P50 (median) predictions
+        #     'mape': None,
+        #     'coverage_80': None,  # Coverage of P10-P90 interval (target: 0.80)
+        #     'model_type': 'Quantile'
+        # },
+        
+        # ========================================================================
+        # CLASSIFICATION MODELS - Predict regime (magnitude bucket)
+        # ========================================================================
+        # Format: {'accuracy': float, 'f1_macro': float}
+        # 'Train_Regime_Classifier': {
+        #     'accuracy': None,  # Overall accuracy (target: >0.80)
+        #     'f1_macro': None,  # F1 score macro average (target: >0.75)
+        # },
     }
     
     print("📊 Collecting results from completed jobs...\n")
@@ -152,12 +257,30 @@ def main():
         # Check if we have manual results
         if display_name in manual_results:
             metrics = manual_results[display_name]
-            if metrics['mae'] is not None:
-                print(f"  ✅ {display_name}: MAE=${metrics['mae']:.2f}")
+            
+            # Different output based on model type
+            if 'accuracy' in metrics:
+                # Classification model
+                if metrics['accuracy'] is not None:
+                    print(f"  ✅ {display_name}: Accuracy={metrics['accuracy']*100:.2f}%")
+                else:
+                    print(f"  ⏳ {display_name}: Waiting for manual entry")
+                    print(f"      Job: {job_name}")
+                    print(f"      Check logs at: https://ml.azure.com")
+            elif 'mae' in metrics:
+                # Regression model (including Two-Stage and Quantile)
+                if metrics['mae'] is not None:
+                    if 'coverage_80' in metrics and metrics['coverage_80'] is not None:
+                        print(f"  ✅ {display_name}: MAE=${metrics['mae']:.2f} (P50), Coverage={metrics['coverage_80']*100:.1f}%")
+                    else:
+                        print(f"  ✅ {display_name}: MAE=${metrics['mae']:.2f}")
+                else:
+                    print(f"  ⏳ {display_name}: Waiting for manual entry")
+                    print(f"      Job: {job_name}")
+                    print(f"      Check logs at: https://ml.azure.com")
             else:
-                print(f"  ⏳ {display_name}: Waiting for manual entry")
-                print(f"      Job: {job_name}")
-                print(f"      Check logs at: https://ml.azure.com")
+                print(f"  ⚠️  {display_name}: Invalid metrics format")
+                metrics = {'mae': None, 'rmse': None, 'r2': None, 'mape': None}
         else:
             print(f"  ⚠️  {display_name}: Not in manual_results dict")
             print(f"      Job: {job_name}")
@@ -208,18 +331,30 @@ def main():
         print("  5. Update the 'manual_results' dictionary in this script")
         print(f"  6. Rerun: python {__file__}\n")
     
-    # Print summary stats
-    valid_results = [r for r in results if r[2]['mae'] is not None]
-    if len(valid_results) > 1:
+    # Print summary stats for regression models
+    valid_regression = [r for r in results if 'mae' in r[2] and r[2]['mae'] is not None]
+    valid_classification = [r for r in results if 'accuracy' in r[2] and r[2]['accuracy'] is not None]
+    
+    if len(valid_regression) > 1:
         print("\n" + "="*100)
-        print("  📊 SUMMARY STATISTICS")
+        print("  📊 REGRESSION MODELS - SUMMARY STATISTICS")
         print("="*100)
-        maes = [r[2]['mae'] for r in valid_results]
-        print(f"\n  Models evaluated: {len(valid_results)}")
+        maes = [r[2]['mae'] for r in valid_regression]
+        print(f"\n  Models evaluated: {len(valid_regression)}")
         print(f"  Best MAE:   ${min(maes):.2f}")
         print(f"  Worst MAE:  ${max(maes):.2f}")
         print(f"  Average MAE: ${sum(maes)/len(maes):.2f}")
         print(f"  Range:      ${max(maes) - min(maes):.2f}")
+        print()
+    
+    if len(valid_classification) > 0:
+        print("\n" + "="*100)
+        print("  📊 CLASSIFICATION MODELS - SUMMARY")
+        print("="*100)
+        for display_name, _, metrics in valid_classification:
+            print(f"\n  {display_name}:")
+            print(f"    Accuracy:    {metrics['accuracy']:.4f} ({metrics['accuracy']*100:.2f}%)")
+            print(f"    F1 (Macro):  {metrics['f1_macro']:.4f}")
         print()
 
 
