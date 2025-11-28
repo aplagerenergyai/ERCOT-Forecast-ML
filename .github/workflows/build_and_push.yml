@@ -16,7 +16,7 @@ on:
   workflow_dispatch:  # Manual trigger
 
 env:
-  REGISTRY: myregistry.azurecr.io
+  REGISTRY: ercotforecastingprod.azurecr.io
   IMAGE_NAME: ercot-ml-pipeline
   
 jobs:
